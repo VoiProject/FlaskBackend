@@ -1,7 +1,8 @@
 FROM node:9-slim
-WORKDIR /app
-COPY package.json /app
+WORKDIR /Backend
+COPY package*.json /Backend/
 RUN npm install
-COPY . /app
+COPY . /Backend
+EXPOSE 8080
  
 CMD ["npm", "start"]
