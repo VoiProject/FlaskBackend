@@ -18,3 +18,11 @@ class Post(Base):
         self.title = title
         self.short_description = short_description
         self.long_description = long_description
+
+    def to_json(self):
+        return {'id': self.id,
+                'author_id': self.author_id,
+                'post_dt': self.post_dt,
+                'title': self.title,
+                'short_description': self.short_description,
+                'long_description': self.long_description}

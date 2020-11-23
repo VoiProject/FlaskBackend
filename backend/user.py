@@ -16,3 +16,9 @@ class User(Base):
         self.login = login
         self.pwd_hash = pwd_hash
         self.registration_dt = registration_dt
+
+    def to_json(self):
+        return {'id': self.id,
+                'login': self.login,
+                'pwd_hash': self.pwd_hash,
+                'registration_dt': self.registration_dt}
