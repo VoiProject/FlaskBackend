@@ -270,3 +270,6 @@ ENV/
 
 # Rope project settings
 .ropeproject
+.idea/Backend.iml
+.idea/misc.xml
+.idea/misc.xml
