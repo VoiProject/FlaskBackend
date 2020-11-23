@@ -13,6 +13,8 @@ Base.metadata.create_all(engine)
 session = Session()
 now = datetime.now
 
+PAGE_SIZE = 10  # max number of ideas displayed on page
+
 
 @app.route('/', methods=['GET'])
 def site_map():
@@ -22,7 +24,8 @@ def site_map():
 
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    users = session.query(User).filter(User.id == user_id).all()
+    users = session.query(User) \
+        .filter(User.id == user_id).all()
     logging.info(f'Found {len(users)} with id={user_id}')
     if len(users) == 0:
         abort(404)
@@ -31,7 +34,8 @@ def get_user(user_id):
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
 def get_post(post_id):
-    posts = session.query(Post).filter(Post.id == post_id).all()
+    posts = session.query(Post) \
+        .filter(Post.id == post_id).all()
     if len(posts) == 0:
         abort(404)
     return jsonify({'post': posts[0].to_json()})
@@ -39,7 +43,8 @@ def get_post(post_id):
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
 def get_user_posts(user_id):
-    users = session.query(User).filter(User.id == user_id).all()
+    users = session.query(User) \
+        .filter(User.id == user_id).all()
     if len(users) == 0:
         abort(404)
     user = users[0]
@@ -49,7 +54,12 @@ def get_user_posts(user_id):
     return jsonify({'user_posts': [p.to_json() for p in user_posts]})
 
 
-@app.route('/api/feed/<int:user_id>', methods=['GET'])
-def get_user_feed(user_id):
-    posts = session.query(Post).all()
+@app.route('/api/feed/<int:user_id>', defaults={'page_num': 1}, methods=['GET'])
+@app.route('/api/feed/<int:user_id>/<int:page_num>', methods=['GET'])
+def get_user_feed(user_id, page_num):
+    posts = session.query(Post) \
+        .filter(Post.author_id != user_id) \
+        .order_by(Post.post_dt.desc()) \
+        .offset(PAGE_SIZE * (page_num - 1)) \
+        .limit(PAGE_SIZE).all()
     return jsonify({'user_feed': [p.to_json() for p in posts]})
