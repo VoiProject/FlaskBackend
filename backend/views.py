@@ -69,8 +69,8 @@ def get_user_feed(user_id, page_num):
     return jsonify({'user_feed': [p.to_json() for p in posts]})
 
 
-@app.route('/api/register', methods=['POST'])
-@cross_origin()
+@app.route('/api/register', methods=['POST', 'OPTIONS'])
+# @cross_origin()
 def register_user():
     login = request.form['login']
     pwd_hash = request.form['pwd_hash']
@@ -92,8 +92,8 @@ def register_user():
     # return res
 
 
-@app.route('/api/login', methods=['POST'])
-@cross_origin()
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
+# @cross_origin()
 def login_user():
     login = request.form['login']
     pwd_hash = request.form['pwd_hash']
