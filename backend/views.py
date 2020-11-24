@@ -69,10 +69,10 @@ def get_user_feed(user_id, page_num):
     return jsonify({'user_feed': [p.to_json() for p in posts]})
 
 
-@app.route('/api/register', methods=['POST'])
+@app.route('/api/register', methods=['POST', 'OPTIONS'])
 def register_user():
     login = request.form['login']
-    pwd_hash = request.form['password']
+    pwd_hash = request.form['pwd_hash']
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
@@ -91,10 +91,10 @@ def register_user():
     # return res
 
 
-@app.route('/api/login', methods=['POST'])
+@app.route('/api/login', methods=['POST', 'OPTIONS'])
 def login_user():
     login = request.form['login']
-    pwd_hash = request.form['password']
+    pwd_hash = request.form['pwd_hash']
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
