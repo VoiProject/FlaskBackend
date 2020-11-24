@@ -9,7 +9,7 @@ from .base import Session, Base, engine
 from .user import User
 from .post import Post
 
-
+from flask_cors import CORS, cross_origin
 
 Base.metadata.create_all(engine)
 
