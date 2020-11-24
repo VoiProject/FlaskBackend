@@ -72,8 +72,8 @@ def get_user_feed(user_id, page_num):
 @app.route('/api/register', methods=['POST', 'OPTIONS'])
 # @cross_origin()
 def register_user():
-    login = request.form['login']
-    pwd_hash = request.form['pwd_hash']
+    login = request.args.get('login', type=str)
+    pwd_hash = request.args.get('pwd_hash', type=str)
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
@@ -95,8 +95,8 @@ def register_user():
 @app.route('/api/login', methods=['POST', 'OPTIONS'])
 # @cross_origin()
 def login_user():
-    login = request.form['login']
-    pwd_hash = request.form['pwd_hash']
+    login = request.args.get('login', type=str)
+    pwd_hash = request.args.get('pwd_hash', type=str)
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
