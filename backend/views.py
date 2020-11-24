@@ -18,6 +18,8 @@ now = datetime.now
 
 PAGE_SIZE = 10  # max number of ideas displayed on page
 
+logging.getLogger('flask_cors').level = logging.DEBUG
+
 
 @app.route('/', methods=['GET'])
 @cross_origin()
@@ -74,11 +76,12 @@ def get_user_feed(user_id, page_num):
     return jsonify({'user_feed': [p.to_json() for p in posts]})
 
 
-@app.route('/api/register', methods=['POST', 'OPTIONS'])
+@app.route('/api/register', methods=['POST'])
 @cross_origin()
 def register_user():
     login = request.args.get('login', type=str)
     pwd_hash = request.args.get('pwd_hash', type=str)
+    logging.info(f'Register user call')
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
@@ -97,7 +100,7 @@ def register_user():
     # return res
 
 
-@app.route('/api/login', methods=['POST', 'OPTIONS'])
+@app.route('/api/login', methods=['POST'])
 @cross_origin()
 def login_user():
     login = request.args.get('login', type=str)
