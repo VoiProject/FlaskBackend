@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 from flask import Flask, jsonify, abort, request, make_response
 
+from functools import update_wrapper
 from backend import app
 
 from .base import Session, Base, engine
@@ -18,18 +19,57 @@ now = datetime.now
 
 PAGE_SIZE = 10  # max number of ideas displayed on page
 
-logging.getLogger('flask_cors').level = logging.DEBUG
+# logging.getLogger('flask_cors').level = logging.DEBUG
+
+
+@app.before_request
+def option_autoreply():
+    """ Always reply 200 on OPTIONS request """
+
+    if request.method == 'OPTIONS':
+        print("Cors check")
+        resp = app.make_default_options_response()
+
+        headers = None
+        if 'ACCESS_CONTROL_REQUEST_HEADERS' in request.headers:
+            headers = request.headers['ACCESS_CONTROL_REQUEST_HEADERS']
+
+        h = resp.headers
+
+        # Allow the origin which made the XHR
+        h['Access-Control-Allow-Origin'] = request.headers['Origin']
+        # Allow the actual method
+        h['Access-Control-Allow-Methods'] = request.headers['Access-Control-Request-Method']
+        # Allow for 10 seconds
+        h['Access-Control-Max-Age'] = "10"
+
+        # We also keep current headers
+        if headers is not None:
+            h['Access-Control-Allow-Headers'] = headers
+
+        return resp
+
+
+@app.after_request
+def set_allow_origin(resp):
+    """ Set origin for GET, POST, PUT, DELETE requests """
+
+    h = resp.headers
+
+    # Allow crossdomain for other HTTP Verbs
+    if request.method != 'OPTIONS' and 'Origin' in request.headers:
+        h['Access-Control-Allow-Origin'] = request.headers['Origin']
+
+    return resp
 
 
 @app.route('/', methods=['GET'])
-@cross_origin()
 def site_map():
     res = str(app.url_map)
     return res
 
 
 @app.route('/api/user/<int:user_id>', methods=['GET'])
-@cross_origin()
 def get_user(user_id):
     users = session.query(User) \
         .filter(User.id == user_id).all()
@@ -40,7 +80,6 @@ def get_user(user_id):
 
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
-@cross_origin()
 def get_post(post_id):
     posts = session.query(Post) \
         .filter(Post.id == post_id).all()
@@ -50,7 +89,6 @@ def get_post(post_id):
 
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
-@cross_origin()
 def get_user_posts(user_id):
     users = session.query(User) \
         .filter(User.id == user_id).all()
@@ -66,8 +104,8 @@ def get_user_posts(user_id):
 @app.route('/api/feed/', defaults={'page_num': 1, 'user_id': -1}, methods=['GET'])
 @app.route('/api/feed/<int:user_id>', defaults={'page_num': 1}, methods=['GET'])
 @app.route('/api/feed/<int:user_id>/<int:page_num>', methods=['GET'])
-@cross_origin()
 def get_user_feed(user_id, page_num):
+    print("getting feed")
     posts = session.query(Post) \
         .filter(Post.author_id != user_id) \
         .order_by(Post.post_dt.desc()) \
@@ -77,7 +115,6 @@ def get_user_feed(user_id, page_num):
 
 
 @app.route('/api/register', methods=['POST'])
-@cross_origin()
 def register_user():
     login = request.args.get('login', type=str)
     pwd_hash = request.args.get('pwd_hash', type=str)
@@ -101,7 +138,6 @@ def register_user():
 
 
 @app.route('/api/login', methods=['POST'])
-@cross_origin()
 def login_user():
     login = request.args.get('login', type=str)
     pwd_hash = request.args.get('pwd_hash', type=str)
@@ -113,9 +149,6 @@ def login_user():
         abort(404)
 
     return jsonify({'user_id': user_login_result(login, pwd_hash)})
-    # res = make_response("Login response")
-    # res.set_cookie('user_id', user_login_result(login, pwd_hash))
-    # return res
 
 
 def user_login_checker(login, pwd_hash):
@@ -129,7 +162,6 @@ def user_login_result(login, pwd_hash):
 
 
 @app.route('/api/post', methods=['POST'])
-@cross_origin()
 def add_post():
     user_id = request.form.get('user_id')
     if not user_id:
