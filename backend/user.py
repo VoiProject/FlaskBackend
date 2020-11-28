@@ -20,5 +20,4 @@ class User(Base):
     def to_json(self):
         return {'id': self.id,
                 'login': self.login,
-                'pwd_hash': self.pwd_hash,
                 'registration_dt': self.registration_dt}
