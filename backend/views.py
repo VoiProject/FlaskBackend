@@ -239,7 +239,13 @@ def routes_info():
                     obj = import_string(import_name)
                     routes.append({rule.rule: "%s\n%s" % (",".join(list(rule.methods)), obj.__doc__)})
                 else:
-                    routes.append({rule.rule: app.view_functions[rule.endpoint].__doc__})
+                    methods = list(filter(lambda x: x in ['GET', 'POST', 'DELETE', 'PUT', 'PATCH'], list(rule.methods)))
+
+                    methods_repr = ""
+                    for m in methods:
+                        methods_repr += m + " "
+
+                    routes.append({rule.rule: methods_repr})
         except Exception as exc:
             routes.append({rule.rule:
                                "(%s) INVALID ROUTE DEFINITION!!!" % rule.endpoint})
