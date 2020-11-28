@@ -1,16 +1,17 @@
 from datetime import datetime, timedelta
 import logging
 
-from flask import Flask, jsonify, abort, request, make_response
+from flask import Flask, jsonify, abort, request, make_response, after_this_request, send_from_directory, redirect
 
-from functools import update_wrapper
 from backend import app
 
 from .base import Session, Base, engine
 from .user import User
 from .post import Post
-
+import json
 from flask_cors import CORS, cross_origin
+
+cors = CORS(app)
 
 Base.metadata.create_all(engine)
 
@@ -19,51 +20,20 @@ now = datetime.now
 
 PAGE_SIZE = 10  # max number of ideas displayed on page
 
-# logging.getLogger('flask_cors').level = logging.DEBUG
-
-
-@app.before_request
-def option_autoreply():
-    """ Always reply 200 on OPTIONS request """
-
-    if request.method == 'OPTIONS':
-        print("Cors check")
-        resp = app.make_default_options_response()
-
-        headers = None
-        if 'ACCESS_CONTROL_REQUEST_HEADERS' in request.headers:
-            headers = request.headers['ACCESS_CONTROL_REQUEST_HEADERS']
-
-        h = resp.headers
-
-        # Allow the origin which made the XHR
-        h['Access-Control-Allow-Origin'] = request.headers['Origin']
-        # Allow the actual method
-        h['Access-Control-Allow-Methods'] = request.headers['Access-Control-Request-Method']
-        # Allow for 10 seconds
-        h['Access-Control-Max-Age'] = "10"
-
-        # We also keep current headers
-        if headers is not None:
-            h['Access-Control-Allow-Headers'] = headers
-
-        return resp
-
-
-@app.after_request
-def set_allow_origin(resp):
-    """ Set origin for GET, POST, PUT, DELETE requests """
-
-    h = resp.headers
-
-    # Allow crossdomain for other HTTP Verbs
-    if request.method != 'OPTIONS' and 'Origin' in request.headers:
-        h['Access-Control-Allow-Origin'] = request.headers['Origin']
-
-    return resp
-
 
 @app.route('/', methods=['GET'])
+def index():
+    return send_from_directory(app.config['UPLOAD_FOLDER'],
+                               'index.html')
+
+
+@app.route('/<path:filename>', methods=['GET'])
+def root(filename):
+    return send_from_directory(app.config['UPLOAD_FOLDER'],
+                               filename)
+
+
+@app.route('/api/', methods=['GET'])
 def site_map():
     res = str(app.url_map)
     return res
@@ -76,7 +46,7 @@ def get_user(user_id):
     logging.info(f'Found {len(users)} with id={user_id}')
     if len(users) == 0:
         abort(404)
-    return jsonify({'user': users[0].to_json()})
+    return jsonify(users[0].to_json())
 
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
@@ -85,7 +55,7 @@ def get_post(post_id):
         .filter(Post.id == post_id).all()
     if len(posts) == 0:
         abort(404)
-    return jsonify({'post': posts[0].to_json()})
+    return jsonify(posts[0].to_json())
 
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
@@ -138,9 +108,11 @@ def register_user():
 
 
 @app.route('/api/login', methods=['POST'])
+@cross_origin()
 def login_user():
-    login = request.args.get('login', type=str)
-    pwd_hash = request.args.get('pwd_hash', type=str)
+    data = json.loads(request.get_data())
+    login = data['login']
+    pwd_hash = data['pwd_hash']
 
     user_exists = user_login_checker(login, pwd_hash)
     print("User", login, pwd_hash, "exists:", user_exists)
@@ -163,15 +135,19 @@ def user_login_result(login, pwd_hash):
 
 @app.route('/api/post', methods=['POST'])
 def add_post():
-    user_id = request.form.get('user_id')
+    data = json.loads(request.get_data())
+    user_id = data['user_id']
     if not user_id:
         abort(404)
 
-    title = request.form.get('title')
-    short_description = request.form.get('short_description')
-    long_description = request.form.get('long_description')
+    title = data['title']
+    short_description = data['short_description']
+    long_description = data['long_description']
 
-    session.add(Post(user_id, now(), title, short_description, long_description))
+    post = Post(user_id, now(), title, short_description, long_description)
+    session.add(post)
     session.commit()
 
-    return "Post added"
+    session.refresh(post)
+
+    return jsonify({'result': 'OK', 'post_id': post.id})
