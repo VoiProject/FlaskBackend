@@ -89,9 +89,10 @@ def root(filename):
     data = send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
     print(filename, user_authenticated())
+
     if not user_authenticated():
         return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
-                                                             'login.html'))
+                                                             filename))
     else:
         return make_response(data)
 
