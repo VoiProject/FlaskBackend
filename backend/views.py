@@ -87,8 +87,9 @@ def get_user_feed(user_id, page_num):
 
 @app.route('/api/register', methods=['POST'])
 def register_user():
-    login = request.args.get('login', type=str)
-    pwd_hash = request.args.get('pwd_hash', type=str)
+    data = json.loads(request.get_data())
+    login = data['login']
+    pwd_hash = data['pwd_hash']
     logging.info(f'Register user call')
 
     user_exists = user_login_checker(login, pwd_hash)
@@ -99,13 +100,9 @@ def register_user():
         session.add(User(login, pwd_hash, now()))
         session.commit()
     else:
-        abort(404)
+        abort(409)
 
     return jsonify({'user_id': user_login_result(login, pwd_hash)})
-
-    # res = make_response("Register response")
-    # res.set_cookie('user_id', user_login_result(login, pwd_hash))
-    # return res
 
 
 @app.route('/api/login', methods=['POST'])
