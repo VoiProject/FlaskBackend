@@ -1,4 +1,5 @@
 from sqlalchemy import ForeignKey, Integer, Column, String, DateTime
+from sqlalchemy.orm import relationship
 
 from .base import Base
 
@@ -8,9 +9,10 @@ class Post(Base):
     id = Column(Integer, primary_key=True)
     author_id = Column(Integer, ForeignKey('users.id'))
     post_dt = Column(DateTime)
-    title = Column(String)
-    short_description = Column(String)
-    long_description = Column(String)
+    title = Column(String(128))
+    short_description = Column(String(256))
+    long_description = Column(String(1024))
+    likes = relationship('Like')
 
     def __init__(self, author_id, post_dt, title, short_description, long_description):
         self.author_id = author_id

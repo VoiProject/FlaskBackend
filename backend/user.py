@@ -11,6 +11,7 @@ class User(Base):
     pwd_hash = Column(String)
     registration_dt = Column(DateTime)
     posts = relationship('Post')
+    likes = relationship('Like')
 
     def __init__(self, login, pwd_hash, registration_dt):
         self.login = login

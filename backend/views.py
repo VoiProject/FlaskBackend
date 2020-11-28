@@ -11,6 +11,7 @@ from backend import app
 from .base import Session, Base, engine
 from .user import User
 from .post import Post
+from .like import Like
 import json
 from flask_cors import CORS, cross_origin
 
@@ -58,6 +59,14 @@ def get_user_by_id(user_id):
     return users[0]
 
 
+def get_post_by_id(post_id):
+    posts = db_session.query(Post) \
+        .filter(Post.id == post_id).all()
+    if len(posts) == 0:
+        return None
+    return posts[0]
+
+
 @app.route('/login.html', methods=['GET'])
 def login_page():
     return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
@@ -87,12 +96,6 @@ def root(filename):
         return make_response(data)
 
 
-@app.route('/api/', methods=['GET'])
-def site_map():
-    res = str(app.url_map)
-    return res
-
-
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
     user = get_user_by_id(user_id)
@@ -103,11 +106,62 @@ def get_user(user_id):
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
 def get_post(post_id):
-    posts = db_session.query(Post) \
-        .filter(Post.id == post_id).all()
-    if len(posts) == 0:
+    post = get_post_by_id(post_id)
+    if not post:
         abort(404)
-    return jsonify(posts[0].to_json())
+    return jsonify(post.to_json())
+
+
+@app.route('/api/post/likes/<int:post_id>', methods=['GET'])
+def get_post_likes(post_id):
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    return jsonify(post.likes)
+
+
+@app.route('/api/post/like/<int:post_id>', methods=['POST'])
+def like_post(post_id):
+    user_auth = user_authenticated()
+    if not user_auth:
+        abort(401)
+    user_id = request.cookies.get('user_id')
+
+    old_like = post_user_like(post_id, user_id)
+    if old_like:
+        db_session.delete(old_like)
+        db_session.commit()
+        return jsonify({'status': 'OK', 'like_state': False})
+    else:
+        like = Like(user_id, post_id)
+        db_session.add(like)
+        db_session.commit()
+
+        db_session.refresh(like)
+
+        return jsonify({'status': 'OK', 'like_state': True})
+
+
+def post_user_like(post_id, user_id):
+    likes = db_session.query(Like) \
+        .filter(Like.user_id == user_id and Like.post_id == post_id).all()
+    if len(likes) == 0:
+        return None
+    else:
+        return likes[0]
+
+
+@app.route('/api/post/is_liked/<int:post_id>', methods=['GET'])
+def is_post_liked_by_user(post_id):
+    user_auth = user_authenticated()
+    if not user_auth:
+        return jsonify({'result': False})
+    user_id = request.cookies.get('user_id')
+    like = post_user_like(post_id, user_id)
+    if not like:
+        return jsonify({'result': False})
+    else:
+        return jsonify({'result': True})
 
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
@@ -224,11 +278,24 @@ def add_post():
     return jsonify({'result': 'OK', 'post_id': post.id})
 
 
-@app.route('/api/post', methods=['DELETE'])
-def delete_post():
-    data = json.loads(request.get_data())
+@app.route('/api/post/<int:post_id>', methods=['DELETE'])
+def delete_post(post_id):
+    # data = json.loads(request.get_data())
+    # post_id = data['post_id']
+    user_auth = user_authenticated()
+    if not user_auth:
+        abort(401)
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    if str(post.authod_id) != request.cookies.get('user_id'):
+        abort(401)
+    db_session.delete(post)
+    db_session.commit()
+    return jsonify({'status': 'OK'})
 
 
+@app.route('/api/', methods=['GET'])
 @app.route('/api/help', methods=['GET'])
 def routes_info():
     routes = []
