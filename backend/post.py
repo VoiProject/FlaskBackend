@@ -12,7 +12,8 @@ class Post(Base):
     title = Column(String(128))
     short_description = Column(String(256))
     long_description = Column(String(1024))
-    likes = relationship('Like')
+    likes = relationship('Like', cascade="all,delete")
+    comments = relationship('Comment', cascade="all,delete")
 
     def __init__(self, author_id, post_dt, title, short_description, long_description):
         self.author_id = author_id

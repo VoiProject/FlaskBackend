@@ -10,8 +10,9 @@ class User(Base):
     login = Column(String)
     pwd_hash = Column(String)
     registration_dt = Column(DateTime)
-    posts = relationship('Post')
-    likes = relationship('Like')
+    posts = relationship('Post', cascade="all,delete")
+    likes = relationship('Like', cascade="all,delete")
+    comments = relationship('Comment', cascade="all,delete")
 
     def __init__(self, login, pwd_hash, registration_dt):
         self.login = login

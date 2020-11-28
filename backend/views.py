@@ -12,6 +12,8 @@ from .base import Session, Base, engine
 from .user import User
 from .post import Post
 from .like import Like
+from .comment import Comment
+
 import json
 from flask_cors import CORS, cross_origin
 
@@ -67,6 +69,14 @@ def get_post_by_id(post_id):
     return posts[0]
 
 
+def get_comment_by_id(comment_id):
+    comments = db_session.query(Comment) \
+        .filter(Comment.id == comment_id).all()
+    if len(comments) == 0:
+        return None
+    return comments[0]
+
+
 @app.route('/login.html', methods=['GET'])
 def login_page():
     return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
@@ -118,7 +128,16 @@ def get_post_likes(post_id):
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
-    return jsonify(post.likes)
+    return jsonify([c.to_json() for c in post.likes])
+
+
+@app.route('/api/post/likes/count/<int:post_id>', methods=['GET'])
+def get_post_likes_count(post_id):
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    cnt = db_session.query(Like).filter(Like.post_id == post_id).count()
+    return jsonify({'count': cnt})
 
 
 @app.route('/api/post/like/<int:post_id>', methods=['POST'])
@@ -128,7 +147,12 @@ def like_post(post_id):
         abort(401)
     user_id = request.cookies.get('user_id')
 
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+
     old_like = post_user_like(post_id, user_id)
+    print("old like", old_like)
     if old_like:
         db_session.delete(old_like)
         db_session.commit()
@@ -145,7 +169,7 @@ def like_post(post_id):
 
 def post_user_like(post_id, user_id):
     likes = db_session.query(Like) \
-        .filter(Like.user_id == user_id and Like.post_id == post_id).all()
+        .filter(Like.user_id == user_id, Like.post_id == post_id).all()
     if len(likes) == 0:
         return None
     else:
@@ -156,13 +180,56 @@ def post_user_like(post_id, user_id):
 def is_post_liked_by_user(post_id):
     user_auth = user_authenticated()
     if not user_auth:
-        return jsonify({'result': False})
+        return jsonify({'like_state': False})
     user_id = request.cookies.get('user_id')
     like = post_user_like(post_id, user_id)
     if not like:
-        return jsonify({'result': False})
+        return jsonify({'like_state': False})
     else:
-        return jsonify({'result': True})
+        return jsonify({'like_state': True})
+
+
+@app.route('/api/comment/<int:comment_id>', methods=['GET'])
+def get_comment(comment_id):
+    comment = get_comment_by_id(comment_id)
+    if not comment:
+        abort(404)
+    return jsonify(comment.to_json())
+
+
+@app.route('/api/post/comments/<int:post_id>', methods=['GET'])
+def get_post_comments(post_id):
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    return jsonify([c.to_json() for c in post.comments])
+
+
+@app.route('/api/post/comments/count/<int:post_id>', methods=['GET'])
+def get_post_comments_count(post_id):
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    cnt = db_session.query(Comment).filter(Comment.post_id == post_id).count()
+    return jsonify({'count': cnt})
+
+
+@app.route('/api/post/comment/<int:post_id>', methods=['POST'])
+def add_post_comment(post_id):
+    user_auth = user_authenticated()
+    if not user_auth:
+        abort(401)
+    user_id = request.cookies.get('user_id')
+    post = get_post_by_id(post_id)
+    if not post:
+        abort(404)
+    data = json.loads(request.get_data())
+    comment_text = data['comment_text']
+    comment = Comment(user_id, post_id, comment_text)
+    db_session.add(comment)
+    db_session.commit()
+
+    return jsonify({'status': 'OK'})
 
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
@@ -281,15 +348,13 @@ def add_post():
 
 @app.route('/api/post/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
-    # data = json.loads(request.get_data())
-    # post_id = data['post_id']
     user_auth = user_authenticated()
     if not user_auth:
         abort(401)
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
-    if str(post.authod_id) != request.cookies.get('user_id'):
+    if str(post.author_id) != request.cookies.get('user_id'):
         abort(401)
     db_session.delete(post)
     db_session.commit()
@@ -299,6 +364,10 @@ def delete_post(post_id):
 @app.route('/api/', methods=['GET'])
 @app.route('/api/help', methods=['GET'])
 def routes_info():
+    """
+    some info
+    :return:
+    """
     routes = []
     for rule in app.url_map.iter_rules():
         try:
