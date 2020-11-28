@@ -1,7 +1,8 @@
 from datetime import datetime, timedelta
 import logging
 
-from flask import Flask, jsonify, abort, request, make_response, after_this_request, send_from_directory, redirect
+from flask import Flask, jsonify, abort, request, make_response,\
+    after_this_request, send_from_directory, redirect, session
 
 from backend import app
 
