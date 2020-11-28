@@ -216,6 +216,9 @@ def get_post_comments_count(post_id):
 
 @app.route('/api/post/comment/<int:post_id>', methods=['POST'])
 def add_post_comment(post_id):
+    """
+    REQUIRE JSON: {'comment_text': <str>}
+    """
     user_auth = user_authenticated()
     if not user_auth:
         abort(401)
@@ -264,6 +267,10 @@ def get_user_feed(user_id, page_num):
 
 @app.route('/api/register', methods=['POST'])
 def register_user():
+    """
+     REQUIRE JSON: {'login': <str>, 'pwd_hash': <str>}
+    """
+
     data = json.loads(request.get_data())
     login = data['login']
     pwd_hash = data['pwd_hash']
@@ -291,6 +298,10 @@ def register_user():
 @app.route('/api/login', methods=['POST'])
 @cross_origin()
 def login_user():
+    """
+     REQUIRE JSON: {'login': <str>, 'pwd_hash': <str>}
+    """
+
     data = json.loads(request.get_data())
     login = data['login']
     pwd_hash = data['pwd_hash']
@@ -325,6 +336,10 @@ def user_login_result(login, pwd_hash):
 
 @app.route('/api/post', methods=['POST'])
 def add_post():
+    """
+    REQUIRE JSON: {'user_id': <int>}
+    """
+
     data = json.loads(request.get_data())
     user_id = data['user_id']
 
@@ -364,10 +379,6 @@ def delete_post(post_id):
 @app.route('/api/', methods=['GET'])
 @app.route('/api/help', methods=['GET'])
 def routes_info():
-    """
-    some info
-    :return:
-    """
     routes = []
     for rule in app.url_map.iter_rules():
         try:
@@ -379,9 +390,13 @@ def routes_info():
                 else:
                     methods = list(filter(lambda x: x in ['GET', 'POST', 'DELETE', 'PUT', 'PATCH'], list(rule.methods)))
 
-                    methods_repr = ""
+                    methods_repr = []
                     for m in methods:
-                        methods_repr += m + " "
+                        methods_repr.append(m)
+
+                    endpoint_doc = app.view_functions[rule.endpoint].__doc__
+                    if endpoint_doc:
+                        methods_repr.append(list(str(endpoint_doc).split('\n'))[1:-1])
 
                     routes.append({rule.rule: methods_repr})
         except Exception as exc:
@@ -389,7 +404,6 @@ def routes_info():
                                "(%s) INVALID ROUTE DEFINITION!!!" % rule.endpoint})
             route_info = "%s => %s" % (rule.rule, rule.endpoint)
             app.logger.error("Invalid route: %s" % route_info, exc_info=True)
-            # func_list[rule.rule] = obj.__doc__
 
     routes = sorted(routes, key=lambda d: list(d.keys()))
     return jsonify(code=200, data=routes)
