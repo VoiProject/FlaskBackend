@@ -2,8 +2,9 @@ from datetime import datetime, timedelta
 import logging
 from secrets import token_hex
 
-from flask import Flask, jsonify, abort, request, make_response,\
+from flask import Flask, jsonify, abort, request, make_response, \
     after_this_request, send_from_directory, redirect
+from jinja2.utils import import_string
 
 from backend import app
 
@@ -29,38 +30,60 @@ def user_authenticated():
     user_id = request.cookies.get('user_id')
     session_token = request.cookies.get('session_token')
     if user_id and session_token:
-        if user_token_exists():
-            return True
-    abort(401)
-
-
-def user_token_exists():
-    user_id = request.cookies.get('user_id')
-    session_token = request.cookies.get('session_token')
-    if user_id and session_token:
-        if user_id in user_tokens and user_tokens[user_id] == session_token:
+        if str(user_id) in user_tokens and user_tokens[str(user_id)] == session_token:
             return True
     return False
 
 
+def make_clear_token_response(data):
+    resp = make_response(data)
+    resp.set_cookie('user_id', '', expires=0)
+    resp.set_cookie('session_token', '', expires=0)
+    return resp
+
+
 def add_user_token(user_id):
-    user_tokens[user_id] = token_hex(16)
+    user_tokens[str(user_id)] = token_hex(16)
 
 
 def get_user_token(user_id):
-    return user_tokens[user_id]
+    return user_tokens[str(user_id)]
+
+
+def get_user_by_id(user_id):
+    users = db_session.query(User) \
+        .filter(User.id == user_id).all()
+    if len(users) == 0:
+        return None
+    return users[0]
+
+
+@app.route('/login.html', methods=['GET'])
+def login_page():
+    return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
+                                                         'login.html'))
+
+
+@app.route('/register.html', methods=['GET'])
+def register_page():
+    return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
+                                                         'register.html'))
 
 
 @app.route('/', methods=['GET'])
 def index():
-    return send_from_directory(app.config['UPLOAD_FOLDER'],
-                               'index.html')
+    return redirect('/index.html')
 
 
 @app.route('/<path:filename>', methods=['GET'])
 def root(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'],
+    data = send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
+    print(filename, user_authenticated())
+    if not user_authenticated():
+        return make_clear_token_response(data)
+    else:
+        return make_response(data)
 
 
 @app.route('/api/', methods=['GET'])
@@ -71,12 +94,10 @@ def site_map():
 
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    users = db_session.query(User) \
-        .filter(User.id == user_id).all()
-    logging.info(f'Found {len(users)} with id={user_id}')
-    if len(users) == 0:
+    user = get_user_by_id(user_id)
+    if not user:
         abort(404)
-    return jsonify(users[0].to_json())
+    return jsonify(user.to_json())
 
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
@@ -90,24 +111,26 @@ def get_post(post_id):
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
 def get_user_posts(user_id):
-    users = db_session.query(User) \
-        .filter(User.id == user_id).all()
-    if len(users) == 0:
+    user = get_user_by_id(user_id)
+    if not user:
         abort(404)
-    user = users[0]
+
     user_posts = user.posts
     if len(user_posts) == 0:
         abort(404)
     return jsonify({'user_posts': [p.to_json() for p in user_posts]})
 
 
-@app.route('/api/feed/', defaults={'page_num': 1, 'user_id': -1}, methods=['GET'])
+@app.route('/api/feed/', defaults={'page_num': 1, 'user_id': 0}, methods=['GET'])
 @app.route('/api/feed/<int:user_id>', defaults={'page_num': 1}, methods=['GET'])
 @app.route('/api/feed/<int:user_id>/<int:page_num>', methods=['GET'])
 def get_user_feed(user_id, page_num):
-    print("getting feed")
-    print("User session ")
-    print(user_tokens)
+    user_auth = user_authenticated()
+    print("Feed user auth", user_auth)
+    if not user_auth and user_id != 0:
+        return redirect('/api/feed/0')
+    if user_auth and str(user_id) != request.cookies.get('user_id'):
+        return redirect('/api/feed/' + request.cookies.get('user_id'))
     posts = db_session.query(Post) \
         .filter(Post.author_id != user_id) \
         .order_by(Post.post_dt.desc()) \
@@ -154,7 +177,7 @@ def login_user():
 
     user_id = user_login_result(login, pwd_hash)
 
-    if user_exists and not user_token_exists():
+    if user_exists and not user_authenticated():
         print("Add user session")
         add_user_token(user_id)
 
@@ -181,7 +204,10 @@ def user_login_result(login, pwd_hash):
 def add_post():
     data = json.loads(request.get_data())
     user_id = data['user_id']
+
     if not user_id:
+        abort(404)
+    if not user_authenticated() or not user_id == request.cookies.get('user_id'):
         abort(404)
 
     title = data['title']
@@ -200,3 +226,35 @@ def add_post():
 @app.route('/api/post', methods=['DELETE'])
 def delete_post():
     data = json.loads(request.get_data())
+
+
+@app.route('/api/help', methods=['GET'])
+def routes_info():
+    routes = []
+    for rule in app.url_map.iter_rules():
+        try:
+            if rule.endpoint != 'static':
+                if hasattr(app.view_functions[rule.endpoint], 'import_name'):
+                    import_name = app.view_functions[rule.endpoint].import_name
+                    obj = import_string(import_name)
+                    routes.append({rule.rule: "%s\n%s" % (",".join(list(rule.methods)), obj.__doc__)})
+                else:
+                    routes.append({rule.rule: app.view_functions[rule.endpoint].__doc__})
+        except Exception as exc:
+            routes.append({rule.rule:
+                               "(%s) INVALID ROUTE DEFINITION!!!" % rule.endpoint})
+            route_info = "%s => %s" % (rule.rule, rule.endpoint)
+            app.logger.error("Invalid route: %s" % route_info, exc_info=True)
+            # func_list[rule.rule] = obj.__doc__
+
+    routes = sorted(routes, key=lambda d: list(d.keys()))
+    return jsonify(code=200, data=routes)
+
+
+@app.route('/api/profile/<int:user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    user = get_user_by_id(user_id)
+    if not user:
+        return abort(404)
+
+    return jsonify({'user': user.to_json(), 'user_posts': user.posts})
