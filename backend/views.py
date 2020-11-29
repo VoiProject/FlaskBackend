@@ -33,7 +33,7 @@ def user_authenticated():
     user_id = request.cookies.get('user_id')
     session_token = request.cookies.get('session_token')
     if user_id and session_token:
-        if str(user_id) in user_tokens and user_tokens[str(user_id)] == session_token:
+        if user_tokens.get(str(user_id), None) == session_token:
             return True
     return False
 
@@ -98,11 +98,9 @@ def index():
 def root(filename):
     data = send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
-    print(filename, user_authenticated())
 
     if not user_authenticated():
-        return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
-                                                             filename))
+        return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'], filename))
     else:
         return make_response(data)
 
@@ -152,7 +150,6 @@ def like_post(post_id):
         abort(404)
 
     old_like = post_user_like(post_id, user_id)
-    print("old like", old_like)
     if old_like:
         db_session.delete(old_like)
         db_session.commit()
@@ -161,8 +158,6 @@ def like_post(post_id):
         like = Like(user_id, post_id)
         db_session.add(like)
         db_session.commit()
-
-        db_session.refresh(like)
 
         return jsonify({'status': 'OK', 'like_state': True})
 
@@ -182,6 +177,7 @@ def is_post_liked_by_user(post_id):
     if not user_auth:
         return jsonify({'like_state': False})
     user_id = request.cookies.get('user_id')
+
     like = post_user_like(post_id, user_id)
     if not like:
         return jsonify({'like_state': False})
@@ -223,11 +219,14 @@ def add_post_comment(post_id):
     if not user_auth:
         abort(401)
     user_id = request.cookies.get('user_id')
+
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
+
     data = json.loads(request.get_data())
     comment_text = data['comment_text']
+
     comment = Comment(user_id, post_id, comment_text)
     db_session.add(comment)
     db_session.commit()
@@ -244,6 +243,7 @@ def get_user_posts(user_id):
     user_posts = user.posts
     if len(user_posts) == 0:
         abort(404)
+
     return jsonify({'user_posts': [p.to_json() for p in user_posts]})
 
 
@@ -252,7 +252,6 @@ def get_user_posts(user_id):
 @app.route('/api/feed/<int:user_id>/<int:page_num>', methods=['GET'])
 def get_user_feed(user_id, page_num):
     user_auth = user_authenticated()
-    print("Feed user auth", user_auth)
     if not user_auth and user_id != 0:
         return redirect('/api/feed/0')
     if user_auth and str(user_id) != request.cookies.get('user_id'):
@@ -270,28 +269,25 @@ def register_user():
     """
      REQUIRE JSON: {'login': <str>, 'pwd_hash': <str>}
     """
-
     data = json.loads(request.get_data())
     login = data['login']
     pwd_hash = data['pwd_hash']
-    logging.info(f'Register user call')
 
-    user_exists = user_login_checker(login, pwd_hash)
-    print("User", login, pwd_hash, "exists:", user_exists)
+    user_exists = user_registration_exists(login)
 
     if not user_exists:
-        print("Adding new user")
         db_session.add(User(login, pwd_hash, now()))
         db_session.commit()
-        add_user_token(user_login_result(login, pwd_hash))
+        add_user_token(user_login_id(login, pwd_hash))
     else:
         abort(409)
 
-    user_id = user_login_result(login, pwd_hash)
+    user_id = user_login_id(login, pwd_hash)
 
     resp = make_response(jsonify({'user_id': user_id}))
     resp.set_cookie('user_id', str(user_id))
     resp.set_cookie('session_token', str(get_user_token(user_id)))
+
     return resp
 
 
@@ -306,13 +302,11 @@ def login_user():
     login = data['login']
     pwd_hash = data['pwd_hash']
 
-    user_exists = user_login_checker(login, pwd_hash)
-    print("User", login, pwd_hash, "exists:", user_exists)
+    user_exists = user_login_exists(login, pwd_hash)
 
-    user_id = user_login_result(login, pwd_hash)
+    user_id = user_login_id(login, pwd_hash)
 
     if user_exists and not user_authenticated():
-        print("Add user session")
         add_user_token(user_id)
 
     if not user_exists:
@@ -321,15 +315,21 @@ def login_user():
     resp = make_response(jsonify({'user_id': user_id}))
     resp.set_cookie('user_id', str(user_id))
     resp.set_cookie('session_token', str(get_user_token(user_id)))
+
     return resp
 
 
-def user_login_checker(login, pwd_hash):
+def user_registration_exists(login):
+    ans = db_session.query(User).filter(User.login == login).order_by(User.id.asc()).count()
+    return ans > 0
+
+
+def user_login_exists(login, pwd_hash):
     ans = db_session.query(User).filter(User.login == login, User.pwd_hash == pwd_hash).order_by(User.id.asc()).count()
     return ans > 0
 
 
-def user_login_result(login, pwd_hash):
+def user_login_id(login, pwd_hash):
     ans = db_session.query(User).filter(User.login == login, User.pwd_hash == pwd_hash).order_by(User.id.asc()).one()
     return ans.id
 
@@ -337,16 +337,15 @@ def user_login_result(login, pwd_hash):
 @app.route('/api/post', methods=['POST'])
 def add_post():
     """
-    REQUIRE JSON: {'user_id': <int>}
+    REQUIRE JSON: {'title': <str>, 'short_description': <str>, 'long_description': <str>}
     """
 
     data = json.loads(request.get_data())
-    user_id = data['user_id']
 
-    if not user_id:
-        abort(404)
-    if not user_authenticated() or not user_id == request.cookies.get('user_id'):
-        abort(404)
+    user_auth = user_authenticated()
+    if not user_auth:
+        abort(401)
+    user_id = request.cookies.get('user_id')
 
     title = data['title']
     short_description = data['short_description']
@@ -355,10 +354,9 @@ def add_post():
     post = Post(user_id, now(), title, short_description, long_description)
     db_session.add(post)
     db_session.commit()
-
     db_session.refresh(post)
 
-    return jsonify({'result': 'OK', 'post_id': post.id})
+    return jsonify({'status': 'OK', 'post_id': post.id})
 
 
 @app.route('/api/post/<int:post_id>', methods=['DELETE'])
@@ -366,10 +364,11 @@ def delete_post(post_id):
     user_auth = user_authenticated()
     if not user_auth:
         abort(401)
+    user_id = request.cookies.get('user_id')
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
-    if str(post.author_id) != request.cookies.get('user_id'):
+    if str(post.author_id) != user_id:
         abort(401)
     db_session.delete(post)
     db_session.commit()
