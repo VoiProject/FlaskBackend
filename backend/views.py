@@ -415,4 +415,4 @@ def get_user_profile(user_id):
     if not user:
         return abort(404)
 
-    return jsonify({'user': user.to_json(), 'user_posts': user.posts})
+    return jsonify({'user': user.to_json(), 'user_posts': [x.to_json() for x in user.posts]})
