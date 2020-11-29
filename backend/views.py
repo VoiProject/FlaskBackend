@@ -1,5 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime
 import logging
+import math
 from secrets import token_hex
 
 from flask import Flask, jsonify, abort, request, make_response, \
@@ -24,7 +25,9 @@ Base.metadata.create_all(engine)
 db_session = Session()
 now = datetime.now
 
-PAGE_SIZE = 10  # max number of ideas displayed on page
+config = {
+    'page_size': 10,  # max number of ideas displayed on page
+}
 
 user_tokens = {}
 
@@ -75,6 +78,11 @@ def get_comment_by_id(comment_id):
     if len(comments) == 0:
         return None
     return comments[0]
+
+
+@app.route('/api/config', methods=['GET'])
+def get_config():
+    return jsonify(config)
 
 
 @app.route('/login.html', methods=['GET'])
@@ -256,12 +264,17 @@ def get_user_feed(user_id, page_num):
         return redirect('/api/feed/0')
     if user_auth and str(user_id) != request.cookies.get('user_id'):
         return redirect('/api/feed/' + request.cookies.get('user_id'))
-    posts = db_session.query(Post) \
+
+    query = db_session.query(Post) \
         .filter(Post.author_id != user_id) \
-        .order_by(Post.post_dt.desc()) \
-        .offset(PAGE_SIZE * (page_num - 1)) \
-        .limit(PAGE_SIZE).all()
-    return jsonify({'user_feed': [p.to_json() for p in posts]})
+        .order_by(Post.post_dt.desc())
+
+    pages_count = math.ceil(query.count() / config['page_size'])
+    posts = query \
+        .offset(config['page_size'] * (page_num - 1)) \
+        .limit(config['page_size']).all()
+
+    return jsonify({'pages_count': pages_count, 'user_feed': [p.to_json() for p in posts]})
 
 
 @app.route('/api/register', methods=['POST'])
@@ -303,14 +316,13 @@ def login_user():
     pwd_hash = data['pwd_hash']
 
     user_exists = user_login_exists(login, pwd_hash)
+    if not user_exists:
+        abort(404)
 
     user_id = user_login_id(login, pwd_hash)
 
     if user_exists and not user_authenticated():
         add_user_token(user_id)
-
-    if not user_exists:
-        abort(404)
 
     resp = make_response(jsonify({'user_id': user_id}))
     resp.set_cookie('user_id', str(user_id))
