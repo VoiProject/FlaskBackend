@@ -423,6 +423,8 @@ def search_posts(page_num):
                 "must": {
                     "multi_match": {
                         "query": data["query"],
+                        "fuzziness": "AUTO",
+                        "tie_breaker": 0.4,
                         "fields": ["title", "short_description", "long_description"]
                     }
                 },
