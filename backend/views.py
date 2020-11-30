@@ -1,10 +1,13 @@
 from datetime import datetime
+import json
 import logging
 import math
+import os
 from secrets import token_hex
 
-from flask import Flask, jsonify, abort, request, make_response, \
-    after_this_request, send_from_directory, redirect
+from elasticsearch import Elasticsearch
+from flask import jsonify, abort, request, make_response, send_from_directory, redirect
+from flask_cors import CORS, cross_origin
 from jinja2.utils import import_string
 
 from backend import app
@@ -15,18 +18,21 @@ from .post import Post
 from .like import Like
 from .comment import Comment
 
-import json
-from flask_cors import CORS, cross_origin
-
 cors = CORS(app)
 
 Base.metadata.create_all(engine)
-
 db_session = Session()
+
+try:
+    es = Elasticsearch([{'host': os.environ['ELASTIC_HOST'], 'port': os.environ['ELASTIC_PORT']}])
+except:
+    logging.info("ElasticSearch not connected")
+    es = None
+
 now = datetime.now
 
 config = {
-    'page_size': 10,  # max number of ideas displayed on page
+    'page_size': 5,  # max number of ideas displayed on page
 }
 
 user_tokens = {}
@@ -255,15 +261,14 @@ def get_user_posts(user_id):
     return jsonify({'user_posts': [p.to_json() for p in user_posts]})
 
 
-@app.route('/api/feed/', defaults={'page_num': 1, 'user_id': 0}, methods=['GET'])
-@app.route('/api/feed/<int:user_id>', defaults={'page_num': 1}, methods=['GET'])
-@app.route('/api/feed/<int:user_id>/<int:page_num>', methods=['GET'])
-def get_user_feed(user_id, page_num):
+@app.route('/api/feed/', defaults={'page_num': 1}, methods=['GET'])
+@app.route('/api/feed/<int:page_num>', methods=['GET'])
+def get_user_feed(page_num):
     user_auth = user_authenticated()
-    if not user_auth and user_id != 0:
-        return redirect('/api/feed/0')
-    if user_auth and str(user_id) != request.cookies.get('user_id'):
-        return redirect('/api/feed/' + request.cookies.get('user_id'))
+    if not user_auth:
+        user_id = 0
+    else:
+        user_id = request.cookies.get('user_id')
 
     query = db_session.query(Post) \
         .filter(Post.author_id != user_id) \
@@ -363,10 +368,14 @@ def add_post():
     short_description = data['short_description']
     long_description = data['long_description']
 
-    post = Post(user_id, now(), title, short_description, long_description)
+    dt = now()
+    post = Post(user_id, dt, title, short_description, long_description)
     db_session.add(post)
     db_session.commit()
     db_session.refresh(post)
+
+    data_with_user_id = {**data, 'author_id': user_id, 'post_dt': dt}
+    es.index('posts', id=post.id, body=data_with_user_id)
 
     return jsonify({'status': 'OK', 'post_id': post.id})
 
@@ -377,14 +386,63 @@ def delete_post(post_id):
     if not user_auth:
         abort(401)
     user_id = request.cookies.get('user_id')
+
     post = get_post_by_id(post_id)
+
     if not post:
         abort(404)
+
     if str(post.author_id) != user_id:
         abort(401)
+
     db_session.delete(post)
     db_session.commit()
+
+    es.delete('posts', id=post_id)
+
     return jsonify({'status': 'OK'})
+
+
+@app.route('/api/search/posts', defaults={'page_num': 1}, methods=['POST'])
+@app.route('/api/search/posts/<int:page_num>', methods=['POST'])
+def search_posts(page_num):
+    """
+    REQUIRE JSON: {'query': <str>}
+    """
+    user_auth = user_authenticated()
+    if not user_auth:
+        user_id = 0
+    else:
+        user_id = request.cookies.get('user_id')
+
+    data = json.loads(request.get_data())
+    body = {
+        "query": {
+            "bool": {
+                "must": {
+                    "multi_match": {
+                        "query": data["query"],
+                        "fields": ["title", "short_description", "long_description"]
+                    }
+                },
+                "must_not": {
+                    "match": {
+                        "author_id": user_id
+                    }
+                }
+            }
+        }
+    }
+    search_body = {**body,
+                   "from": (page_num - 1) * config['page_size'],
+                   "size": config['page_size']}
+
+    count_result = es.count(index='posts', body=body)
+    pages_count = math.ceil(count_result['count'] / config['page_size'])
+    search_result = es.search(index='posts', body=search_body)
+    user_feed = [{**hit['_source'], 'id': hit['_id']} for hit in search_result['hits']['hits']]
+
+    return jsonify({'pages_count': pages_count, 'user_feed': user_feed})
 
 
 @app.route('/api/', methods=['GET'])
