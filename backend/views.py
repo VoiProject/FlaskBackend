@@ -405,7 +405,6 @@ def delete_post(post_id):
     return jsonify({'status': 'OK'})
 
 
-@app.route('/api/search/posts', defaults={'page_num': 1}, methods=['POST'])
 @app.route('/api/search/posts/<int:page_num>', methods=['POST'])
 def search_posts(page_num):
     """
