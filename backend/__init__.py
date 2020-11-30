@@ -2,12 +2,10 @@ import os
 
 from flask import Flask
 from flask_cors import CORS
-from flask_elasticsearch import FlaskElasticsearch
+from elasticsearch import Elasticsearch
 
 app = Flask(__name__, static_url_path='/Frontend/')
-es = FlaskElasticsearch(app)
-
-print("Elasticsearch config: ", es)
+es = Elasticsearch()
 
 app.secret_key = os.urandom(24)
 app.config['UPLOAD_FOLDER'] = "../Frontend"
