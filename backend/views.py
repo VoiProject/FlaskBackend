@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 import json
 import logging
@@ -282,6 +283,10 @@ def get_user_feed(page_num):
     return jsonify({'pages_count': pages_count, 'user_feed': [p.to_json() for p in posts]})
 
 
+def get_hash(s):
+    return hashlib.sha256(s.encode('utf-8')).hexdigest()
+
+
 @app.route('/api/register', methods=['POST'])
 def register_user():
     """
@@ -289,7 +294,7 @@ def register_user():
     """
     data = json.loads(request.get_data())
     login = data['login']
-    pwd_hash = data['pwd_hash']
+    pwd_hash = get_hash(data['pwd_hash'])
 
     user_exists = user_registration_exists(login)
 
@@ -318,7 +323,7 @@ def login_user():
 
     data = json.loads(request.get_data())
     login = data['login']
-    pwd_hash = data['pwd_hash']
+    pwd_hash = get_hash(data['pwd_hash'])
 
     user_exists = user_login_exists(login, pwd_hash)
     if not user_exists:
