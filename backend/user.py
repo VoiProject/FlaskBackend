@@ -8,7 +8,7 @@ class User(Base):
     __tablename__ = 'users'
     id = Column(Integer, primary_key=True)
     login = Column(String)
-    pwd_hash = Column(String)
+    pwd_hash = Column(String(64))
     registration_dt = Column(DateTime)
     posts = relationship('Post', cascade="all,delete")
     likes = relationship('Like', cascade="all,delete")
