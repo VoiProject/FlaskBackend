@@ -446,6 +446,25 @@ def search_posts(page_num):
     return jsonify({'pages_count': pages_count, 'user_feed': user_feed})
 
 
+def get_es_size():
+    return es.count(index='posts', body={"query": {"match_all": {}}})['count']
+
+
+@app.route('/api/sync/postgresql_to_elasticsearch', methods=['GET'])
+def sync_postgresql_to_elasticsearch():
+    es_size_old = get_es_size()
+    posts = db_session.query(Post).all()
+
+    for post in posts:
+        post_json = post.to_json()
+        del post_json['id']
+        es.index('posts', id=post.id, body=post_json)
+
+    es.indices.refresh(index="posts")
+    es_size_new = get_es_size()
+    return jsonify({'status': 'OK', 'es_size_old': es_size_old, 'es_size_new': es_size_new, 'postgres_size': len(posts)})
+
+
 @app.route('/api/', methods=['GET'])
 @app.route('/api/help', methods=['GET'])
 def routes_info():
