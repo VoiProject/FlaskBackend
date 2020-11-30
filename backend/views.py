@@ -374,8 +374,9 @@ def add_post():
     db_session.commit()
     db_session.refresh(post)
 
-    data_with_user_id = {**data, 'author_id': user_id, 'post_dt': dt}
-    es.index('posts', id=post.id, body=data_with_user_id)
+    if es is not None:
+        data_with_user_id = {**data, 'author_id': user_id, 'post_dt': dt}
+        es.index('posts', id=post.id, body=data_with_user_id)
 
     return jsonify({'status': 'OK', 'post_id': post.id})
 
@@ -398,7 +399,8 @@ def delete_post(post_id):
     db_session.delete(post)
     db_session.commit()
 
-    es.delete('posts', id=post_id)
+    if es is not None:
+        es.delete('posts', id=post_id)
 
     return jsonify({'status': 'OK'})
 
