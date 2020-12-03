@@ -14,13 +14,15 @@ class Post(Base):
     long_description = Column(String(1024))
     likes = relationship('Like', cascade="all,delete")
     comments = relationship('Comment', cascade="all,delete")
+    audio_link = Column(String)
 
-    def __init__(self, author_id, post_dt, title, short_description, long_description):
+    def __init__(self, author_id, post_dt, title, short_description, long_description, audio_link):
         self.author_id = author_id
         self.post_dt = post_dt
         self.title = title
         self.short_description = short_description
         self.long_description = long_description
+        self.audio_link = audio_link
 
     def to_json(self):
         return {'id': self.id,
@@ -28,4 +30,5 @@ class Post(Base):
                 'post_dt': self.post_dt,
                 'title': self.title,
                 'short_description': self.short_description,
-                'long_description': self.long_description}
+                'long_description': self.long_description,
+                'audio_link': self.audio_link}

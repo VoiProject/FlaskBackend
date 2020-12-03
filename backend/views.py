@@ -10,6 +10,8 @@ from elasticsearch import Elasticsearch
 from flask import jsonify, abort, request, make_response, send_from_directory, redirect
 from flask_cors import CORS, cross_origin
 from jinja2.utils import import_string
+from sqlalchemy import func
+from werkzeug.utils import secure_filename
 
 from backend import app
 
@@ -37,6 +39,9 @@ config = {
 }
 
 user_tokens = {}
+
+uploads_dir = os.path.join(app.instance_path, app.config['AUDIO_STORAGE'])
+os.makedirs(uploads_dir, exist_ok=True)
 
 
 def user_authenticated():
@@ -377,9 +382,18 @@ def user_login_id(login, pwd_hash):
 def add_post():
     """
     REQUIRE JSON: {'title': <str>, 'short_description': <str>, 'long_description': <str>}
+    REQUIRE FILE: file: <audio>
     """
+    try:
+        print(request.files)
+        is_this_file = request.files.get('file')
+        print(is_this_file)
+        print(is_this_file.filename)
+    except AttributeError:
+        print("Has no file")
+        abort(404)
 
-    data = json.loads(request.get_data())
+    data = json.loads(request.form['data'])
 
     user_auth = user_authenticated()
     if not user_auth:
@@ -390,8 +404,15 @@ def add_post():
     short_description = data['short_description']
     long_description = data['long_description']
 
+    file_name = request.files.get('file').filename
+    filename, file_extension = os.path.splitext(file_name)
+    audio_link = str(hash(db_session.query(func.max(Post.id)).scalar())) + "_" + str(hash(file_name)) + file_extension
+
+    print("Saving ", os.path.join(app.config['AUDIO_STORAGE'], audio_link))
+    request.files.get('file').save(os.path.join(uploads_dir, secure_filename(audio_link)))
+
     dt = now()
-    post = Post(user_id, dt, title, short_description, long_description)
+    post = Post(user_id, dt, title, short_description, long_description, audio_link)
     db_session.add(post)
     db_session.commit()
     db_session.refresh(post)
@@ -531,6 +552,17 @@ def get_user_profile(user_id):
         return abort(404)
 
     return jsonify({'user': user.to_json(), 'user_posts': [full_post_info(x) for x in user.posts]})
+
+
+@app.route('/api/audio/<path:audio_link>', methods=['GET'])
+def get_audio(audio_link):
+    data = send_from_directory(app.config['AUDIO_STORAGE'],
+                               audio_link)
+
+    if not user_authenticated():
+        return make_clear_token_response(send_from_directory(os.path.join(uploads_dir), audio_link))
+    else:
+        return make_response(data)
 
 
 def full_post_info_str(post):
