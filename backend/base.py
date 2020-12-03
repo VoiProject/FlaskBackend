@@ -22,4 +22,4 @@ except KeyError:
 print("USING DOCKER CONFIG:", use_docker_config)
 
 Base = declarative_base()
-Session = sessionmaker(bind=engine)
+Session = sessionmaker(bind=engine, autocommit=True)

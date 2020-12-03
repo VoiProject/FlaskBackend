@@ -227,11 +227,13 @@ def like_post(post_id):
 
     old_like = post_user_like(post_id, user_id)
     if old_like:
+        db_session.begin()
         db_session.delete(old_like)
         db_session.commit()
         return jsonify({'status': 'OK', 'like_state': False})
     else:
         like = Like(user_id, post_id)
+        db_session.begin()
         db_session.add(like)
         db_session.commit()
 
@@ -339,7 +341,11 @@ def add_post_comment(post_id):
     data = json.loads(request.get_data())
     comment_text = data['comment_text']
 
+    if len(comment_text) < 1:
+        abort(404)
+
     comment = Comment(user_id, post_id, comment_text)
+    db_session.begin()
     db_session.add(comment)
     db_session.commit()
 
@@ -434,6 +440,7 @@ def register_user():
     user_exists = user_registration_exists(login)
 
     if not user_exists:
+        db_session.begin()
         db_session.add(User(login, pwd_hash, now()))
         db_session.commit()
         add_user_token(user_login_id(login, pwd_hash))
@@ -528,6 +535,7 @@ def add_post():
     if len(title) > 126 or len(short_description) > 255 or len(long_description) > 1023:
         abort(404)
 
+    print("try get filenage")
     file_name = request.files.get('file').filename
     filename, file_extension = os.path.splitext(file_name)
     audio_link = str(hash(db_session.query(func.max(Post.id)).scalar())) + "_" + str(hash(file_name)) + file_extension
@@ -537,6 +545,7 @@ def add_post():
 
     dt = now()
     post = Post(user_id, dt, title, short_description, long_description, audio_link)
+    db_session.begin()
     db_session.add(post)
     db_session.commit()
     db_session.refresh(post)
@@ -567,6 +576,7 @@ def delete_post(post_id):
     if str(post.author_id) != user_id:
         abort(401)
 
+    db_session.begin()
     db_session.delete(post)
     db_session.commit()
 
