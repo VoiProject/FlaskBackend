@@ -145,12 +145,16 @@ def get_post_likes(post_id):
 
 
 @app.route('/api/post/likes/count/<int:post_id>', methods=['GET'])
-def get_post_likes_count(post_id):
+def get_post_likes_count_request(post_id):
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
+    return jsonify({'count': get_post_likes_count(post_id)})
+
+
+def get_post_likes_count(post_id):
     cnt = db_session.query(Like).filter(Like.post_id == post_id).count()
-    return jsonify({'count': cnt})
+    return cnt
 
 
 @app.route('/api/post/like/<int:post_id>', methods=['POST'])
@@ -187,17 +191,21 @@ def post_user_like(post_id, user_id):
 
 
 @app.route('/api/post/is_liked/<int:post_id>', methods=['GET'])
+def is_post_liked_by_user_request(post_id):
+    return jsonify({'like_state': is_post_liked_by_user(post_id)})
+
+
 def is_post_liked_by_user(post_id):
     user_auth = user_authenticated()
     if not user_auth:
-        return jsonify({'like_state': False})
+        return False
     user_id = request.cookies.get('user_id')
 
     like = post_user_like(post_id, user_id)
     if not like:
-        return jsonify({'like_state': False})
+        return False
     else:
-        return jsonify({'like_state': True})
+        return True
 
 
 @app.route('/api/comment/<int:comment_id>', methods=['GET'])
@@ -217,12 +225,16 @@ def get_post_comments(post_id):
 
 
 @app.route('/api/post/comments/count/<int:post_id>', methods=['GET'])
-def get_post_comments_count(post_id):
+def get_post_comments_count_request(post_id):
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
+    return jsonify({'count': get_post_comments_count(post_id)})
+
+
+def get_post_comments_count(post_id):
     cnt = db_session.query(Comment).filter(Comment.post_id == post_id).count()
-    return jsonify({'count': cnt})
+    return cnt
 
 
 @app.route('/api/post/comment/<int:post_id>', methods=['POST'])
@@ -280,7 +292,12 @@ def get_user_feed(page_num):
         .offset(config['page_size'] * (page_num - 1)) \
         .limit(config['page_size']).all()
 
-    return jsonify({'pages_count': pages_count, 'user_feed': [p.to_json() for p in posts]})
+    return jsonify({'pages_count': pages_count, 'user_feed': [{"post": p.to_json(),
+                                                               "likes_count": get_post_likes_count(p.id),
+                                                               "liked_by_user": is_post_liked_by_user(p.id),
+                                                               "comments_count": get_post_comments_count(p.id),
+                                                               "author_login": get_user_by_id(p.author_id).login}
+                                                              for p in posts]})
 
 
 def get_hash(s):
@@ -450,7 +467,8 @@ def search_posts(page_num):
     search_result = es.search(index='posts', body=search_body)
     user_feed = [{**hit['_source'], 'id': hit['_id']} for hit in search_result['hits']['hits']]
 
-    return jsonify({'pages_count': pages_count, 'user_feed': user_feed})
+    return jsonify({'pages_count': pages_count, 'user_feed': [full_post_info_str(p)
+                                                              for p in user_feed]})
 
 
 def get_es_size():
@@ -469,7 +487,8 @@ def sync_postgresql_to_elasticsearch():
 
     es.indices.refresh(index="posts")
     es_size_new = get_es_size()
-    return jsonify({'status': 'OK', 'es_size_old': es_size_old, 'es_size_new': es_size_new, 'postgres_size': len(posts)})
+    return jsonify(
+        {'status': 'OK', 'es_size_old': es_size_old, 'es_size_new': es_size_new, 'postgres_size': len(posts)})
 
 
 @app.route('/api/', methods=['GET'])
@@ -511,4 +530,20 @@ def get_user_profile(user_id):
     if not user:
         return abort(404)
 
-    return jsonify({'user': user.to_json(), 'user_posts': [x.to_json() for x in user.posts]})
+    return jsonify({'user': user.to_json(), 'user_posts': [full_post_info(x) for x in user.posts]})
+
+
+def full_post_info_str(post):
+    return {"post": post,
+            "likes_count": get_post_likes_count(post['id']),
+            "liked_by_user": is_post_liked_by_user(post['id']),
+            "comments_count": get_post_comments_count(post['id']),
+            "author_login": get_user_by_id(post['author_id']).login}
+
+
+def full_post_info(p):
+    return {"post": p.to_json(),
+            "likes_count": get_post_likes_count(p.id),
+            "liked_by_user": is_post_liked_by_user(p.id),
+            "comments_count": get_post_comments_count(p.id),
+            "author_login": get_user_by_id(p.author_id).login}

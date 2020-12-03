@@ -17,7 +17,7 @@ try:
 except KeyError:
     use_docker_config = False
     engine = create_engine(
-        'postgres://jkemxbmo:Y8Ympw1YUisZplQZJuwmRah9ODa8n6vV@rogue.db.elephantsql.com:5432/jkemxbmo')
+        'postgres://drgghtjs:SGBs0eUt9rh9WVEpDDK0rq00uceccJcp@suleiman.db.elephantsql.com:5432/drgghtjs')
 
 print("USING DOCKER CONFIG:", use_docker_config)
 
