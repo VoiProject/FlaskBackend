@@ -94,28 +94,46 @@ def get_comment_by_id(comment_id):
 
 @app.route('/api/config', methods=['GET'])
 def get_config():
+    """
+    Configuration for website
+    RESP: JSON: {
+                    'page_size': 5,  # max number of ideas displayed on page
+                }
+    """
     return jsonify(config)
 
 
 @app.route('/login.html', methods=['GET'])
 def login_page():
+    """
+    Clear cookies and return login page file
+    """
     return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
                                                          'login.html'))
 
 
 @app.route('/register.html', methods=['GET'])
 def register_page():
+    """
+    Clear cookies and return register page file
+    """
     return make_clear_token_response(send_from_directory(app.config['UPLOAD_FOLDER'],
                                                          'register.html'))
 
 
 @app.route('/', methods=['GET'])
 def index():
+    """
+    Redirect to the index.html file
+    """
     return redirect('/index.html')
 
 
 @app.route('/<path:filename>', methods=['GET'])
 def root(filename):
+    """
+    Return file with filename from static files in Frontend
+    """
     data = send_from_directory(app.config['UPLOAD_FOLDER'],
                                filename)
 
@@ -127,6 +145,13 @@ def root(filename):
 
 @app.route('/api/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
+    """
+    Get info about user with user_id
+    RESP: JSON: {'id': <ind>,
+                'login': <str>,
+                'registration_dt': <dt>
+                }
+    """
     user = get_user_by_id(user_id)
     if not user:
         abort(404)
@@ -135,6 +160,17 @@ def get_user(user_id):
 
 @app.route('/api/post/<int:post_id>', methods=['GET'])
 def get_post(post_id):
+    """
+    Get info about post with post_id
+    RESP: JSON: {'id': <int>,
+                'author_id': <int>,
+                'post_dt': <dt>,
+                'title': <str>,
+                'short_description': <str>,
+                'long_description': <str>,
+                'audio_link': <str>
+                }
+    """
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
@@ -143,6 +179,14 @@ def get_post(post_id):
 
 @app.route('/api/post/likes/<int:post_id>', methods=['GET'])
 def get_post_likes(post_id):
+    """
+    Get list of likes on post with post_id
+    RESP: JSON: [
+                    {'user_id': <int>,
+                    'post_id': <int>
+                    }
+                ]
+    """
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
@@ -151,6 +195,10 @@ def get_post_likes(post_id):
 
 @app.route('/api/post/likes/count/<int:post_id>', methods=['GET'])
 def get_post_likes_count_request(post_id):
+    """
+    Get likes count on post with post_id
+    RESP: JSON: {'count': <int>}
+    """
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
@@ -164,6 +212,10 @@ def get_post_likes_count(post_id):
 
 @app.route('/api/post/like/<int:post_id>', methods=['POST'])
 def like_post(post_id):
+    """
+    Add user like to post in like does not exist, remove if exists
+    RESP: JSON: {'status': 'OK', 'like_state': <bool>}
+    """
     user_auth = user_authenticated()
     if not user_auth:
         abort(401)
@@ -197,6 +249,10 @@ def post_user_like(post_id, user_id):
 
 @app.route('/api/post/is_liked/<int:post_id>', methods=['GET'])
 def is_post_liked_by_user_request(post_id):
+    """
+    Result of checking whether post with post_id is liked by a user
+    RESP: JSON: {'like_state': <bool>}
+    """
     return jsonify({'like_state': is_post_liked_by_user(post_id)})
 
 
@@ -215,6 +271,14 @@ def is_post_liked_by_user(post_id):
 
 @app.route('/api/comment/<int:comment_id>', methods=['GET'])
 def get_comment(comment_id):
+    """
+    Info about comment with comment_id
+    RESP: JSON: {'id': <int>,
+                'user_id': <int>,
+                'post_id': <int>,
+                'comment_text': <str>
+                }
+    """
     comment = get_comment_by_id(comment_id)
     if not comment:
         abort(404)
@@ -223,6 +287,16 @@ def get_comment(comment_id):
 
 @app.route('/api/post/comments/<int:post_id>', methods=['GET'])
 def get_post_comments(post_id):
+    """
+    List of comments form post with post_id
+    RESP: JSON: [
+                    {'id': <int>,
+                    'user_id': <int>,
+                    'post_id': <int>,
+                    'comment_text': <str>
+                    }
+                ]
+    """
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
@@ -231,6 +305,10 @@ def get_post_comments(post_id):
 
 @app.route('/api/post/comments/count/<int:post_id>', methods=['GET'])
 def get_post_comments_count_request(post_id):
+    """
+    Comments count of post with post_id
+    RESP: JSON: {'count': <int>}
+    """
     post = get_post_by_id(post_id)
     if not post:
         abort(404)
@@ -245,7 +323,9 @@ def get_post_comments_count(post_id):
 @app.route('/api/post/comment/<int:post_id>', methods=['POST'])
 def add_post_comment(post_id):
     """
+    Add post comment on post with post_id
     REQUIRE JSON: {'comment_text': <str>}
+    RESP: JSON: {'status': 'OK'}
     """
     user_auth = user_authenticated()
     if not user_auth:
@@ -268,6 +348,19 @@ def add_post_comment(post_id):
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
 def get_user_posts(user_id):
+    """
+    List of posts from user with user_id
+    RESP: JSON: [
+                        {'id': <int>,
+                        'author_id': <int>,
+                        'post_dt': <dt>,
+                        'title': <str>,
+                        'short_description': <str>,
+                        'long_description': <str>,
+                        'audio_link': <str>
+                        }
+                ]
+    """
     user = get_user_by_id(user_id)
     if not user:
         abort(404)
@@ -282,6 +375,21 @@ def get_user_posts(user_id):
 @app.route('/api/feed/', defaults={'page_num': 1}, methods=['GET'])
 @app.route('/api/feed/<int:page_num>', methods=['GET'])
 def get_user_feed(page_num):
+    """
+    List of posts that need to be shown on page with page_num
+    RESP: JSON: {"user_feed": [{"post": {'id': <int>,
+                                        'author_id': <int>,
+                                        'post_dt': <dt>,
+                                        'title': <str>,
+                                        'short_description': <str>,
+                                        'long_description': <str>,
+                                        'audio_link': <str>},
+                "likes_count": <int>,
+                "liked_by_user": <bool>,
+                "comments_count": <int>,
+                "author_login": <str>}]
+                }
+    """
     user_auth = user_authenticated()
     if not user_auth:
         user_id = 0
@@ -312,11 +420,16 @@ def get_hash(s):
 @app.route('/api/register', methods=['POST'])
 def register_user():
     """
+     Try register user with passed credentials
      REQUIRE JSON: {'login': <str>, 'pwd_hash': <str>}
+     RESP: Cookie: {'user_id': <int>, 'session_token': <str>}
     """
     data = json.loads(request.get_data())
     login = data['login']
     pwd_hash = get_hash(data['pwd_hash'])
+
+    if len(login) < 4 or len(pwd_hash) < 4:
+        abort(404)
 
     user_exists = user_registration_exists(login)
 
@@ -340,7 +453,9 @@ def register_user():
 @cross_origin()
 def login_user():
     """
+     Try login user with passed credentials
      REQUIRE JSON: {'login': <str>, 'pwd_hash': <str>}
+     RESP: Cookie: {'user_id': <int>, 'session_token': <str>}
     """
 
     data = json.loads(request.get_data())
@@ -381,9 +496,12 @@ def user_login_id(login, pwd_hash):
 @app.route('/api/post', methods=['POST'])
 def add_post():
     """
+    Try add new post with passed data
     REQUIRE JSON: {'title': <str>, 'short_description': <str>, 'long_description': <str>}
     REQUIRE FILE: file: <audio>
+    RESP: JSON: {'status': 'OK', 'post_id': <int>}
     """
+
     try:
         print(request.files)
         is_this_file = request.files.get('file')
@@ -403,6 +521,12 @@ def add_post():
     title = data['title']
     short_description = data['short_description']
     long_description = data['long_description']
+
+    if len(title) < 4:
+        abort(404)
+
+    if len(title) > 126 or len(short_description) > 255 or len(long_description) > 1023:
+        abort(404)
 
     file_name = request.files.get('file').filename
     filename, file_extension = os.path.splitext(file_name)
@@ -426,6 +550,10 @@ def add_post():
 
 @app.route('/api/post/<int:post_id>', methods=['DELETE'])
 def delete_post(post_id):
+    """
+    Delete post with post_id if user is an author
+    RESP: JSON: {'status': 'OK'}
+    """
     user_auth = user_authenticated()
     if not user_auth:
         abort(401)
@@ -451,7 +579,20 @@ def delete_post(post_id):
 @app.route('/api/search/posts/<int:page_num>', methods=['POST'])
 def search_posts(page_num):
     """
+    List of posts that fit the search query
     REQUIRE JSON: {'query': <str>}
+    RESP: JSON: {"user_feed": [{"post": {'id': <int>,
+                                        'author_id': <int>,
+                                        'post_dt': <dt>,
+                                        'title': <str>,
+                                        'short_description': <str>,
+                                        'long_description': <str>,
+                                        'audio_link': <str>},
+                "likes_count": <int>,
+                "liked_by_user": <bool>,
+                "comments_count": <int>,
+                "author_login": <str>}]
+                }
     """
     user_auth = user_authenticated()
     if not user_auth:
@@ -498,6 +639,13 @@ def get_es_size():
 
 @app.route('/api/sync/postgresql_to_elasticsearch', methods=['GET'])
 def sync_postgresql_to_elasticsearch():
+    """
+    Sync db and elasticsearch
+    RESP: JSON: {'status': 'OK',
+                 'es_size_old': <int>,
+                 'es_size_new': <int>,
+                 'postgres_size': <int>)
+    """
     es_size_old = get_es_size()
     posts = db_session.query(Post).all()
 
@@ -515,6 +663,9 @@ def sync_postgresql_to_elasticsearch():
 @app.route('/api/', methods=['GET'])
 @app.route('/api/help', methods=['GET'])
 def routes_info():
+    """
+    Available API description
+    """
     routes = []
     for rule in app.url_map.iter_rules():
         try:
@@ -556,6 +707,10 @@ def get_user_profile(user_id):
 
 @app.route('/api/audio/<path:audio_link>', methods=['GET'])
 def get_audio(audio_link):
+    """
+    Audio file by audio_link
+    RESP: Audio File
+    """
     data = send_from_directory(app.config['AUDIO_STORAGE'],
                                audio_link)
 
