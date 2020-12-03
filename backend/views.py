@@ -40,7 +40,7 @@ config = {
 
 user_tokens = {}
 
-uploads_dir = os.path.join(app.instance_path, app.config['AUDIO_STORAGE'])
+uploads_dir = app.config['AUDIO_STORAGE']
 os.makedirs(uploads_dir, exist_ok=True)
 
 
