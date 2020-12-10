@@ -6,7 +6,6 @@ import math
 import os
 from secrets import token_hex
 
-from elasticsearch import Elasticsearch
 from flask import jsonify, abort, request, make_response, send_from_directory, redirect
 from flask_cors import CORS, cross_origin
 from jinja2.utils import import_string
@@ -15,22 +14,9 @@ from werkzeug.utils import secure_filename
 
 from backend import app
 
-from .base import Session, Base, engine
-from .user import User
-from .post import Post
-from .like import Like
-from .comment import Comment
+from .dao import User, Post, Like, Comment, db_session, es, audio_dir
 
 cors = CORS(app)
-
-Base.metadata.create_all(engine)
-db_session = Session()
-
-try:
-    es = Elasticsearch([{'host': os.environ['ELASTIC_HOST'], 'port': os.environ['ELASTIC_PORT']}])
-except:
-    logging.info("ElasticSearch not connected")
-    es = None
 
 now = datetime.now
 
@@ -39,9 +25,6 @@ config = {
 }
 
 user_tokens = {}
-
-uploads_dir = app.config['AUDIO_STORAGE']
-os.makedirs(uploads_dir, exist_ok=True)
 
 
 def user_authenticated():
@@ -526,13 +509,13 @@ def add_post():
     user_id = request.cookies.get('user_id')
 
     title = data['title']
-    short_description = data['short_description']
-    long_description = data['long_description']
+    description = data['short_description']
+    transcription = data['long_description']
 
-    if len(title) < 4:
+    if len(title) < 1:
         abort(404)
 
-    if len(title) > 126 or len(short_description) > 255 or len(long_description) > 1023:
+    if len(title) > 126 or len(description) > 255 or len(transcription) > 1023:
         abort(404)
 
     print("try get filenage")
@@ -541,10 +524,10 @@ def add_post():
     audio_link = str(hash(db_session.query(func.max(Post.id)).scalar())) + "_" + str(hash(file_name)) + file_extension
 
     print("Saving ", os.path.join(app.config['AUDIO_STORAGE'], audio_link))
-    request.files.get('file').save(os.path.join(uploads_dir, secure_filename(audio_link)))
+    request.files.get('file').save(os.path.join(audio_dir, secure_filename(audio_link)))
 
     dt = now()
-    post = Post(user_id, dt, title, short_description, long_description, audio_link)
+    post = Post(user_id, dt, title, description, transcription, audio_link)
     db_session.begin()
     db_session.add(post)
     db_session.commit()
@@ -725,7 +708,7 @@ def get_audio(audio_link):
                                audio_link)
 
     if not user_authenticated():
-        return make_clear_token_response(send_from_directory(os.path.join(uploads_dir), audio_link))
+        return make_clear_token_response(send_from_directory(os.path.join(audio_dir), audio_link))
     else:
         return make_response(data)
 
