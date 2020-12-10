@@ -423,8 +423,9 @@ def add_post():
 
     try:
         is_this_file = request.files.get('file')
-        print(is_this_file)
-        print(is_this_file.filename)
+        # print(is_this_file)
+        # print(is_this_file.filename)
+        is_this_file.filename
     except AttributeError:
         print("Has no file")
         abort(404)
@@ -461,7 +462,8 @@ def add_post():
 
     if es is not None:
         data_with_user_id = {**data, 'author_id': user_id, 'post_dt': dt}
-        es.index('posts', id=post.id, body=data_with_user_id)
+        es.index(index='posts', id=post.id, body=data_with_user_id)
+        es.indices.refresh(index="posts")
 
     return jsonify({'status': 'OK', 'post_id': post.id})
 
@@ -518,6 +520,8 @@ def search_posts(page_num):
         user_id = request.cookies.get('user_id')
 
     data = json.loads(request.get_data())
+    es.indices.refresh(index="posts")
+
     body = {
         "query": {
             "bool": {

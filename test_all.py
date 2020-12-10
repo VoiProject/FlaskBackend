@@ -145,12 +145,13 @@ def get_feed(client, page=None):
 
 
 def test_user_feed(client):
+    # 4.1.4
+
     def get_feed_correct(page=None):
         response = get_feed(client, page)
         assert response.status_code == 200
         return json.loads(response.data)
 
-    # 4.1.4
     enter_correct(register, client, sample_creds[0])
     add_post(client, 'Title A')
     data = get_feed_correct()
@@ -183,5 +184,33 @@ def test_user_feed(client):
     assert len(data['user_feed']) == 5
 
     data = get_feed_correct(3)
+    assert data['pages_count'] == 3
+    assert len(data['user_feed']) == 1
+
+
+def get_search(client, query, page):
+    return client.post('/api/search/posts/' + str(page), data=json.dumps({'query': query}))
+
+
+def test_search(client):
+    def get_search_correct(query, page):
+        response = get_search(client, query, page)
+        assert response.status_code == 200
+        return json.loads(response.data)
+
+    enter_correct(register, client, sample_creds[0])
+    for i, title in enumerate(['Apple pie'] * 3 + ['Orange juice'] * 11):
+        add_post(client, title)
+
+    enter_correct(register, client, sample_creds[1])
+    data = get_search_correct('pie', 1)
+    assert data['pages_count'] == 1
+    assert len(data['user_feed']) == 3
+
+    data = get_search_correct('orange', 2)
+    assert data['pages_count'] == 3
+    assert len(data['user_feed']) == 5
+
+    data = get_search_correct('Orange', 3)
     assert data['pages_count'] == 3
     assert len(data['user_feed']) == 1
