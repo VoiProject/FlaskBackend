@@ -10,7 +10,8 @@ from backend.dao import Base, engine, db_session, es
 # TODO: rename 'pwd_hash' to 'pwd' throughout the project
 
 sample_creds = [{'login': 'test', 'pwd_hash': '1234'},
-                {'login': 'test2', 'pwd_hash': '2345'}]
+                {'login': 'test2', 'pwd_hash': '2345'},
+                {'login': 'test3', 'pwd_hash': '3456'}]
 sample_wrong_creds = [{'login': 'a', 'pwd_hash': 'b'}]
 sample_user_data = [{'user_id': 1, 'session_token': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]
 
@@ -51,20 +52,24 @@ def register(client, creds):
     return client.post('/api/register', data=json.dumps(creds))
 
 
-def logout(client):
-    return client.post('/api/logout')
-
-
 def login(client, creds):
     return client.post('/api/login', data=json.dumps(creds))
 
 
-@pytest.fixture
-def registration_data(client):
-    response = register(client, sample_creds[0])
+def logout(client):
+    return client.post('/api/logout')
+
+
+def enter_correct(method, client, creds):
+    response = method(client, creds)
     user_data = json.loads(response.data)
     set_cookies(client, user_data)
     return user_data
+
+
+@pytest.fixture
+def registration_data(client):
+    return enter_correct(register, client, sample_creds[0])
 
 
 def test_registration(client):
@@ -113,31 +118,70 @@ def test_login(client, registration_data):
     assert data['user_id'] == 1 and isinstance(data['session_token'], str)
 
 
-def test_add_post(client, registration_data):
+def add_post(client, title='Test title', description='Test description', transcription=''):
     filedir = '/documents'
     filename = 'test_podcast.mp3'
-    set_cookies(client, registration_data)
-
     data = {
         'data': json.dumps({
-            'title': 'Test',
-            'short_description': 'Test audio upload',
-            'long_description': ''
+            'title': title,
+            'short_description': description,
+            'long_description': transcription,
         }),
         'file': (open(os.path.join(filedir, filename), 'rb'), filename)
     }
+    return client.post('/api/post', data=data)
 
-    response = client.post('/api/post', data=data)
+
+def test_add_post(client, registration_data):
+    # 4.1.2
+    response = add_post(client)
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data['status'] == 'OK' and data['post_id'] == 1
 
 
-def test_empty_feed(client, registration_data):
-    response = client.get('/api/feed/')
-    assert response.status_code == 200
-    data = json.loads(response.data)
+def get_feed(client, page=None):
+    return client.get('/api/feed/' + (str(page) if page is not None else ''))
+
+
+def test_user_feed(client):
+    def get_feed_correct(page=None):
+        response = get_feed(client, page)
+        assert response.status_code == 200
+        return json.loads(response.data)
+
+    # 4.1.4
+    enter_correct(register, client, sample_creds[0])
+    add_post(client, 'Title A')
+    data = get_feed_correct()
     assert data['pages_count'] == 0
     assert len(data['user_feed']) == 0
 
-# def test_add_post(client, registration_data):
+    enter_correct(register, client, sample_creds[1])
+    add_post(client, 'Title B')
+    data = get_feed_correct()
+    assert data['pages_count'] == 1
+    assert len(data['user_feed']) == 1
+    assert data['user_feed'][0]['post']['title'] == 'Title A'
+    del data['user_feed'][0]['post']
+    assert data['user_feed'][0] == {"likes_count": 0,
+                                    "liked_by_user": False,
+                                    "comments_count": 0,
+                                    "author_login": sample_creds[0]['login']}
+
+    enter_correct(register, client, sample_creds[2])
+    for i in range(10):
+        add_post(client, f'Title C{i}')
+
+    data = get_feed_correct()
+    assert data['pages_count'] == 1
+    assert len(data['user_feed']) == 2
+
+    enter_correct(login, client, sample_creds[0])
+    data = get_feed_correct(2)
+    assert data['pages_count'] == 3
+    assert len(data['user_feed']) == 5
+
+    data = get_feed_correct(3)
+    assert data['pages_count'] == 3
+    assert len(data['user_feed']) == 1
