@@ -1,24 +1,8 @@
-import json
-import logging
-import os
-
 import pytest
 
 from backend import app
 from backend.dao import Base, engine, db_session, es
-
-# TODO: rename 'pwd_hash' to 'pwd' throughout the project
-
-sample_creds = [{'login': 'test', 'pwd_hash': '1234'},
-                {'login': 'test2', 'pwd_hash': '2345'},
-                {'login': 'test3', 'pwd_hash': '3456'}]
-sample_wrong_creds = [{'login': 'a', 'pwd_hash': 'b'}]
-sample_user_data = [{'user_id': 1, 'session_token': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]
-
-
-def set_cookies(client, cookies):
-    for k, v in cookies.items():
-        client.set_cookie('localhost', key=str(k), value=str(v))
+from test_client import *
 
 
 @pytest.fixture
@@ -33,10 +17,13 @@ def client():
         yield client
 
 
-def simple_response_data_test(client, route):
-    response = client.get(route)
+def unwrap(response):
     assert response.status_code == 200
-    data = json.loads(response.data)
+    return json.loads(response.data)
+
+
+def simple_response_data_test(client, route):
+    data = unwrap(client.get(route))
     assert len(data) > 0
 
 
@@ -46,25 +33,6 @@ def test_config(client):
 
 def test_help(client):
     simple_response_data_test(client, '/api/help')
-
-
-def register(client, creds):
-    return client.post('/api/register', data=json.dumps(creds))
-
-
-def login(client, creds):
-    return client.post('/api/login', data=json.dumps(creds))
-
-
-def logout(client):
-    return client.post('/api/logout')
-
-
-def enter_correct(method, client, creds):
-    response = method(client, creds)
-    user_data = json.loads(response.data)
-    set_cookies(client, user_data)
-    return user_data
 
 
 @pytest.fixture
@@ -78,24 +46,13 @@ def test_registration(client):
 
     # 4.1.1.2
     response = register(client, sample_creds[0])
-    assert response.status_code == 200
-    data = json.loads(response.data)
+    data = unwrap(response)
     assert 'user_id' in data and 'session_token' in data
     assert data['user_id'] == 1 and isinstance(data['session_token'], str)
 
     # 4.1.1.5
     response = register(client, sample_creds[0])
     assert response.status_code == 409
-
-
-def test_logout(client, registration_data):
-    response = logout(client)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data['status'] == 'OK'
-
-    response = logout(client)
-    assert response.status_code == 401
 
 
 def test_login(client, registration_data):
@@ -112,45 +69,37 @@ def test_login(client, registration_data):
 
     # 4.1.1.1
     response = login(client, sample_creds[0])
-    assert response.status_code == 200
-    data = json.loads(response.data)
+    data = unwrap(response)
     assert 'user_id' in data and 'session_token' in data
     assert data['user_id'] == 1 and isinstance(data['session_token'], str)
 
 
-def add_post(client, title='Test title', description='Test description', transcription=''):
-    filedir = '/documents'
-    filename = 'test_podcast.mp3'
-    data = {
-        'data': json.dumps({
-            'title': title,
-            'short_description': description,
-            'long_description': transcription,
-        }),
-        'file': (open(os.path.join(filedir, filename), 'rb'), filename)
-    }
-    return client.post('/api/post', data=data)
+def test_logout(client, registration_data):
+    response = logout(client)
+    data = unwrap(response)
+    assert data['status'] == 'OK'
+
+    response = logout(client)
+    assert response.status_code == 401
 
 
 def test_add_post(client, registration_data):
     # 4.1.2
     response = add_post(client)
-    assert response.status_code == 200
-    data = json.loads(response.data)
-    assert data['status'] == 'OK' and data['post_id'] == 1
+    data = unwrap(response)
+    post_id = data['post_id']
+    assert post_id == 1
 
-
-def get_feed(client, page=None):
-    return client.get('/api/feed/' + (str(page) if page is not None else ''))
+    data = unwrap(get_post(client, post_id))
+    assert data['author_id'] == registration_data['user_id']
+    assert data['title'] == default_title
 
 
 def test_user_feed(client):
     # 4.1.4
 
     def get_feed_correct(page=None):
-        response = get_feed(client, page)
-        assert response.status_code == 200
-        return json.loads(response.data)
+        return unwrap(get_feed(client, page))
 
     enter_correct(register, client, sample_creds[0])
     add_post(client, 'Title A')
@@ -188,15 +137,9 @@ def test_user_feed(client):
     assert len(data['user_feed']) == 1
 
 
-def get_search(client, query, page):
-    return client.post('/api/search/posts/' + str(page), data=json.dumps({'query': query}))
-
-
 def test_search(client):
     def get_search_correct(query, page):
-        response = get_search(client, query, page)
-        assert response.status_code == 200
-        return json.loads(response.data)
+        return unwrap(get_search(client, query, page))
 
     enter_correct(register, client, sample_creds[0])
     for i, title in enumerate(['Apple pie'] * 3 + ['Orange juice'] * 11):
@@ -214,3 +157,29 @@ def test_search(client):
     data = get_search_correct('Orange', 3)
     assert data['pages_count'] == 3
     assert len(data['user_feed']) == 1
+
+
+def test_likes(client):
+    user_data = enter_correct(register, client, sample_creds[0])
+    user_id = user_data['user_id']
+
+    data = unwrap(add_post(client))
+    post_id = data['post_id']
+
+    assert unwrap(get_post_likes(client, post_id)) == []
+    assert unwrap(get_post_likes_count(client, post_id))['count'] == 0
+    assert not unwrap(is_post_liked_by_user(client, post_id))['like_state']
+
+    data = unwrap(like_post(client, post_id))
+    assert data['like_state']
+
+    assert unwrap(get_post_likes(client, post_id)) == [{'user_id': user_id, 'post_id': post_id}]
+    assert unwrap(get_post_likes_count(client, post_id))['count'] == 1
+    assert unwrap(is_post_liked_by_user(client, post_id))['like_state']
+
+    data = unwrap(like_post(client, post_id))
+    assert not data['like_state']
+
+    assert unwrap(get_post_likes(client, post_id)) == []
+    assert unwrap(get_post_likes_count(client, post_id))['count'] == 0
+    assert not unwrap(is_post_liked_by_user(client, post_id))['like_state']
