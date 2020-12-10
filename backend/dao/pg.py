@@ -53,6 +53,11 @@ def get_post_likes_count(post_id):
     return cnt
 
 
+def get_post_comments_count(post_id):
+    cnt = db_session.query(Comment).filter(Comment.post_id == post_id).count()
+    return cnt
+
+
 def post_user_like(post_id, user_id):
     likes = db_session.query(Like) \
         .filter(Like.user_id == user_id, Like.post_id == post_id).all()

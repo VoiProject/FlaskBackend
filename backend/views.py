@@ -228,11 +228,6 @@ def get_post_comments_count_request(post_id):
     return jsonify({'count': get_post_comments_count(post_id)})
 
 
-def get_post_comments_count(post_id):
-    cnt = db_session.query(Comment).filter(Comment.post_id == post_id).count()
-    return cnt
-
-
 @app.route('/api/post/comment/<int:post_id>', methods=['POST'])
 def add_post_comment(post_id):
     """
