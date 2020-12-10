@@ -1,12 +1,8 @@
-import hashlib
 from datetime import datetime
 import json
-import logging
 import math
-import os
-from secrets import token_hex
 
-from flask import jsonify, abort, request, make_response, send_from_directory, redirect
+from flask import jsonify, abort, make_response, send_from_directory, redirect
 from flask_cors import CORS, cross_origin
 from jinja2.utils import import_string
 from sqlalchemy import func
@@ -14,26 +10,15 @@ from werkzeug.utils import secure_filename
 
 from backend import app
 
-from .dao import User, Post, Like, Comment, db_session, es, audio_dir
+from .auth import *
+from .config import config
+from .dao import *
+from .orm import User, Post, Like, Comment
+from .utils import get_hash
 
 cors = CORS(app)
 
 now = datetime.now
-
-config = {
-    'page_size': 5,  # max number of ideas displayed on page
-}
-
-user_tokens = {}
-
-
-def user_authenticated():
-    user_id = request.cookies.get('user_id')
-    session_token = request.cookies.get('session_token')
-    if user_id and session_token:
-        if user_tokens.get(str(user_id), None) == session_token:
-            return True
-    return False
 
 
 def make_clear_token_response(data):
@@ -41,38 +26,6 @@ def make_clear_token_response(data):
     resp.set_cookie('user_id', '', expires=0)
     resp.set_cookie('session_token', '', expires=0)
     return resp
-
-
-def add_user_token(user_id):
-    user_tokens[str(user_id)] = token_hex(16)
-
-
-def get_user_token(user_id):
-    return user_tokens[str(user_id)]
-
-
-def get_user_by_id(user_id):
-    users = db_session.query(User) \
-        .filter(User.id == user_id).all()
-    if len(users) == 0:
-        return None
-    return users[0]
-
-
-def get_post_by_id(post_id):
-    posts = db_session.query(Post) \
-        .filter(Post.id == post_id).all()
-    if len(posts) == 0:
-        return None
-    return posts[0]
-
-
-def get_comment_by_id(comment_id):
-    comments = db_session.query(Comment) \
-        .filter(Comment.id == comment_id).all()
-    if len(comments) == 0:
-        return None
-    return comments[0]
 
 
 @app.route('/api/config', methods=['GET'])
@@ -188,19 +141,13 @@ def get_post_likes_count_request(post_id):
     return jsonify({'count': get_post_likes_count(post_id)})
 
 
-def get_post_likes_count(post_id):
-    cnt = db_session.query(Like).filter(Like.post_id == post_id).count()
-    return cnt
-
-
 @app.route('/api/post/like/<int:post_id>', methods=['POST'])
 def like_post(post_id):
     """
     Add user like to post in like does not exist, remove if exists
     RESP: JSON: {'status': 'OK', 'like_state': <bool>}
     """
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         abort(401)
     user_id = request.cookies.get('user_id')
 
@@ -223,35 +170,16 @@ def like_post(post_id):
         return jsonify({'status': 'OK', 'like_state': True})
 
 
-def post_user_like(post_id, user_id):
-    likes = db_session.query(Like) \
-        .filter(Like.user_id == user_id, Like.post_id == post_id).all()
-    if len(likes) == 0:
-        return None
-    else:
-        return likes[0]
-
-
 @app.route('/api/post/is_liked/<int:post_id>', methods=['GET'])
 def is_post_liked_by_user_request(post_id):
     """
     Result of checking whether post with post_id is liked by a user
     RESP: JSON: {'like_state': <bool>}
     """
-    return jsonify({'like_state': is_post_liked_by_user(post_id)})
-
-
-def is_post_liked_by_user(post_id):
-    user_auth = user_authenticated()
-    if not user_auth:
-        return False
+    if not user_authenticated():
+        abort(401)
     user_id = request.cookies.get('user_id')
-
-    like = post_user_like(post_id, user_id)
-    if not like:
-        return False
-    else:
-        return True
+    return jsonify({'like_state': post_liked_by_user(post_id, user_id)})
 
 
 @app.route('/api/comment/<int:comment_id>', methods=['GET'])
@@ -312,8 +240,7 @@ def add_post_comment(post_id):
     REQUIRE JSON: {'comment_text': <str>}
     RESP: JSON: {'status': 'OK'}
     """
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         abort(401)
     user_id = request.cookies.get('user_id')
 
@@ -379,8 +306,7 @@ def get_user_feed(page_num):
                 "author_login": <str>}]
                 }
     """
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         user_id = 0
     else:
         user_id = request.cookies.get('user_id')
@@ -396,14 +322,10 @@ def get_user_feed(page_num):
 
     return jsonify({'pages_count': pages_count, 'user_feed': [{"post": p.to_json(),
                                                                "likes_count": get_post_likes_count(p.id),
-                                                               "liked_by_user": is_post_liked_by_user(p.id),
+                                                               "liked_by_user": post_liked_by_user(p.id, user_id),
                                                                "comments_count": get_post_comments_count(p.id),
                                                                "author_login": get_user_by_id(p.author_id).login}
                                                               for p in posts]})
-
-
-def get_hash(s):
-    return hashlib.sha256(s.encode('utf-8')).hexdigest()
 
 
 @app.route('/api/register', methods=['POST'])
@@ -432,9 +354,16 @@ def register_user():
 
     user_id = user_login_id(login, pwd_hash)
 
-    resp = make_response(jsonify({'user_id': user_id}))
+    session_token = get_user_token(user_id)
+
+    response_data = {
+        'user_id': user_id,
+        'session_token': session_token
+    }
+    resp = make_response(jsonify(response_data))
+
     resp.set_cookie('user_id', str(user_id))
-    resp.set_cookie('session_token', str(get_user_token(user_id)))
+    resp.set_cookie('session_token', str(session_token))
 
     return resp
 
@@ -461,26 +390,31 @@ def login_user():
     if user_exists and not user_authenticated():
         add_user_token(user_id)
 
-    resp = make_response(jsonify({'user_id': user_id}))
+    session_token = get_user_token(user_id)
+
+    response_data = {
+        'user_id': user_id,
+        'session_token': session_token
+    }
+    resp = make_response(jsonify(response_data))
+
     resp.set_cookie('user_id', str(user_id))
-    resp.set_cookie('session_token', str(get_user_token(user_id)))
+    resp.set_cookie('session_token', str(session_token))
 
     return resp
 
 
-def user_registration_exists(login):
-    ans = db_session.query(User).filter(User.login == login).order_by(User.id.asc()).count()
-    return ans > 0
+@app.route('/api/logout', methods=['POST'])
+@cross_origin()
+def logout_user():
+    if not user_authenticated():
+        abort(401)
+    else:
+        user_id = request.cookies.get('user_id')
 
+    remove_user_token(user_id)
 
-def user_login_exists(login, pwd_hash):
-    ans = db_session.query(User).filter(User.login == login, User.pwd_hash == pwd_hash).order_by(User.id.asc()).count()
-    return ans > 0
-
-
-def user_login_id(login, pwd_hash):
-    ans = db_session.query(User).filter(User.login == login, User.pwd_hash == pwd_hash).order_by(User.id.asc()).one()
-    return ans.id
+    return jsonify({'status': 'OK'})
 
 
 @app.route('/api/post', methods=['POST'])
@@ -503,8 +437,7 @@ def add_post():
 
     data = json.loads(request.form['data'])
 
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         abort(401)
     user_id = request.cookies.get('user_id')
 
@@ -546,8 +479,7 @@ def delete_post(post_id):
     Delete post with post_id if user is an author
     RESP: JSON: {'status': 'OK'}
     """
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         abort(401)
     user_id = request.cookies.get('user_id')
 
@@ -587,8 +519,7 @@ def search_posts(page_num):
                 "author_login": <str>}]
                 }
     """
-    user_auth = user_authenticated()
-    if not user_auth:
+    if not user_authenticated():
         user_id = 0
     else:
         user_id = request.cookies.get('user_id')
@@ -622,12 +553,8 @@ def search_posts(page_num):
     search_result = es.search(index='posts', body=search_body)
     user_feed = [{**hit['_source'], 'id': hit['_id']} for hit in search_result['hits']['hits']]
 
-    return jsonify({'pages_count': pages_count, 'user_feed': [full_post_info_str(p)
+    return jsonify({'pages_count': pages_count, 'user_feed': [full_post_info_str(p, user_id)
                                                               for p in user_feed]})
-
-
-def get_es_size():
-    return es.count(index='posts', body={"query": {"match_all": {}}})['count']
 
 
 @app.route('/api/sync/postgresql_to_elasticsearch', methods=['GET'])
@@ -695,7 +622,7 @@ def get_user_profile(user_id):
     if not user:
         return abort(404)
 
-    return jsonify({'user': user.to_json(), 'user_posts': [full_post_info(x) for x in user.posts]})
+    return jsonify({'user': user.to_json(), 'user_posts': [full_post_info(x, user_id) for x in user.posts]})
 
 
 @app.route('/api/audio/<path:audio_link>', methods=['GET'])
@@ -713,17 +640,17 @@ def get_audio(audio_link):
         return make_response(data)
 
 
-def full_post_info_str(post):
+def full_post_info_str(post, user_id):
     return {"post": post,
             "likes_count": get_post_likes_count(post['id']),
-            "liked_by_user": is_post_liked_by_user(post['id']),
+            "liked_by_user": post_liked_by_user(post['id'], user_id),
             "comments_count": get_post_comments_count(post['id']),
             "author_login": get_user_by_id(post['author_id']).login}
 
 
-def full_post_info(p):
+def full_post_info(p, user_id):
     return {"post": p.to_json(),
             "likes_count": get_post_likes_count(p.id),
-            "liked_by_user": is_post_liked_by_user(p.id),
+            "liked_by_user": post_liked_by_user(p.id, user_id),
             "comments_count": get_post_comments_count(p.id),
             "author_login": get_user_by_id(p.author_id).login}
