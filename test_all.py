@@ -53,6 +53,10 @@ def logout(client, user_data):
     return client.post('/api/logout')
 
 
+def login(client, creds):
+    return client.post('/api/login', data=json.dumps(creds))
+
+
 @pytest.fixture
 def registration_data(client):
     response = register(client, sample_creds[0])
@@ -74,10 +78,26 @@ def test_registration(client):
 
 
 def test_logout(client, registration_data):
+    # response = logout(client, sample_creds[1])
+    # assert response.status_code == 401
+
     response = logout(client, registration_data)
     assert response.status_code == 200
     data = json.loads(response.data)
     assert data['status'] == 'OK'
+
+
+def test_login(client, registration_data):
+    logout(client, registration_data)
+
+    response = login(client, sample_creds[1])
+    assert response.status_code == 404
+
+    response = login(client, sample_creds[0])
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert 'user_id' in data and 'session_token' in data
+    assert data['user_id'] == 1 and isinstance(data['session_token'], str)
 
 
 def test_empty_feed(client, registration_data):
