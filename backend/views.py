@@ -422,7 +422,6 @@ def add_post():
     """
 
     try:
-        print(request.files)
         is_this_file = request.files.get('file')
         print(is_this_file)
         print(is_this_file.filename)
@@ -446,12 +445,11 @@ def add_post():
     if len(title) > 126 or len(description) > 255 or len(transcription) > 1023:
         abort(404)
 
-    print("try get filenage")
     file_name = request.files.get('file').filename
     filename, file_extension = os.path.splitext(file_name)
     audio_link = str(hash(db_session.query(func.max(Post.id)).scalar())) + "_" + str(hash(file_name)) + file_extension
 
-    print("Saving ", os.path.join(app.config['AUDIO_STORAGE'], audio_link))
+    print("Saving ", os.path.join(os.environ['AUDIO_DIR'], audio_link))
     request.files.get('file').save(os.path.join(audio_dir, secure_filename(audio_link)))
 
     dt = now()
@@ -626,8 +624,7 @@ def get_audio(audio_link):
     Audio file by audio_link
     RESP: Audio File
     """
-    data = send_from_directory(app.config['AUDIO_STORAGE'],
-                               audio_link)
+    data = send_from_directory(os.environ['AUDIO_DIR'], audio_link)
 
     if not user_authenticated():
         return make_clear_token_response(send_from_directory(os.path.join(audio_dir), audio_link))

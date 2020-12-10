@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 
 import pytest
 
@@ -10,6 +11,8 @@ from backend.dao import Base, engine, db_session, es
 
 sample_creds = [{'login': 'test', 'pwd_hash': '1234'},
                 {'login': 'test2', 'pwd_hash': '2345'}]
+sample_wrong_creds = [{'login': 'a', 'pwd_hash': 'b'}]
+sample_user_data = [{'user_id': 1, 'session_token': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]
 
 
 def set_cookies(client, cookies):
@@ -64,7 +67,7 @@ def registration_data(client):
 
 
 def test_registration(client):
-    response = register(client, {'login': 'a', 'pwd_hash': 'b'})
+    response = register(client, sample_wrong_creds[0])
     assert response.status_code == 404
 
     response = register(client, sample_creds[0])
@@ -78,8 +81,8 @@ def test_registration(client):
 
 
 def test_logout(client, registration_data):
-    # response = logout(client, sample_creds[1])
-    # assert response.status_code == 401
+    response = logout(client, sample_user_data[0])
+    assert response.status_code == 401
 
     response = logout(client, registration_data)
     assert response.status_code == 200
@@ -98,6 +101,26 @@ def test_login(client, registration_data):
     data = json.loads(response.data)
     assert 'user_id' in data and 'session_token' in data
     assert data['user_id'] == 1 and isinstance(data['session_token'], str)
+
+
+def test_add_post(client, registration_data):
+    filedir = '/documents'
+    filename = 'test_podcast.mp3'
+    set_cookies(client, registration_data)
+
+    data = {
+        'data': json.dumps({
+            'title': 'Test',
+            'short_description': 'Test audio upload',
+            'long_description': ''
+        }),
+        'file': (open(os.path.join(filedir, filename), 'rb'), filename)
+    }
+
+    response = client.post('/api/post', data=data)
+    assert response.status_code == 200
+    data = json.loads(response.data)
+    assert data['status'] == 'OK' and data['post_id'] == 1
 
 
 def test_empty_feed(client, registration_data):
