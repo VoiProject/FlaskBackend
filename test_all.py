@@ -48,7 +48,7 @@ def test_registration(client):
     response = register(client, sample_creds[0])
     data = unwrap(response)
     assert 'user_id' in data and 'session_token' in data
-    assert data['user_id'] == 1 and isinstance(data['session_token'], str)
+    assert isinstance(data['user_id'], int) and isinstance(data['session_token'], str)
 
     # 4.1.1.5
     response = register(client, sample_creds[0])
@@ -71,7 +71,7 @@ def test_login(client, registration_data):
     response = login(client, sample_creds[0])
     data = unwrap(response)
     assert 'user_id' in data and 'session_token' in data
-    assert data['user_id'] == 1 and isinstance(data['session_token'], str)
+    assert isinstance(data['user_id'], int) and isinstance(data['session_token'], str)
 
 
 def test_logout(client, registration_data):
@@ -163,23 +163,52 @@ def test_likes(client):
     user_data = enter_correct(register, client, sample_creds[0])
     user_id = user_data['user_id']
 
-    data = unwrap(add_post(client))
+    response = add_post(client)
+    data = unwrap(response)
     post_id = data['post_id']
 
     assert unwrap(get_post_likes(client, post_id)) == []
     assert unwrap(get_post_likes_count(client, post_id))['count'] == 0
     assert not unwrap(is_post_liked_by_user(client, post_id))['like_state']
 
-    data = unwrap(like_post(client, post_id))
+    response = like_post(client, post_id)
+    data = unwrap(response)
     assert data['like_state']
 
     assert unwrap(get_post_likes(client, post_id)) == [{'user_id': user_id, 'post_id': post_id}]
     assert unwrap(get_post_likes_count(client, post_id))['count'] == 1
     assert unwrap(is_post_liked_by_user(client, post_id))['like_state']
 
-    data = unwrap(like_post(client, post_id))
+    response = like_post(client, post_id)
+    data = unwrap(response)
     assert not data['like_state']
 
     assert unwrap(get_post_likes(client, post_id)) == []
     assert unwrap(get_post_likes_count(client, post_id))['count'] == 0
     assert not unwrap(is_post_liked_by_user(client, post_id))['like_state']
+
+
+def test_comments(client):
+    user_data = enter_correct(register, client, sample_creds[0])
+    user_id = user_data['user_id']
+
+    data = unwrap(add_post(client))
+    post_id = data['post_id']
+
+    assert unwrap(get_post_comments(client, post_id)) == []
+    assert unwrap(get_post_comments_count(client, post_id))['count'] == 0
+
+    response = add_post_comment(client, post_id)
+    data = unwrap(response)
+    comment_id = data['comment_id']
+
+    data_maybe = {
+        'id': comment_id,
+        'user_id': user_id,
+        'post_id': post_id,
+        'comment_text': default_comment
+    }
+    data = unwrap(get_comment(client, comment_id))
+    assert data == data_maybe
+    assert unwrap(get_post_comments(client, post_id)) == [data_maybe]
+    assert unwrap(get_post_comments_count(client, post_id))['count'] == 1

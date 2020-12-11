@@ -7,6 +7,7 @@ sample_creds = [{'login': 'test', 'pwd_hash': '1234'},
 sample_wrong_creds = [{'login': 'a', 'pwd_hash': 'b'}]
 sample_user_data = [{'user_id': 1, 'session_token': 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'}]
 default_title, default_description, default_ranscription = 'Test title', 'Test description', ''
+default_comment = 'Test comment'
 filedir = '/documents'
 filename = 'test_podcast.mp3'
 
@@ -73,3 +74,19 @@ def is_post_liked_by_user(client, post_id):
 
 def like_post(client, post_id):
     return client.post('/api/post/like/' + str(post_id))
+
+
+def get_comment(client, comment_id):
+    return client.get('/api/comment/' + str(comment_id))
+
+
+def get_post_comments(client, post_id):
+    return client.get('/api/post/comments/' + str(post_id))
+
+
+def get_post_comments_count(client, post_id):
+    return client.get('/api/post/comments/count/' + str(post_id))
+
+
+def add_post_comment(client, post_id, comment=default_comment):
+    return client.post('/api/post/comment/' + str(post_id), data=json.dumps({'comment_text': comment}))

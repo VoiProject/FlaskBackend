@@ -253,8 +253,9 @@ def add_post_comment(post_id):
     db_session.begin()
     db_session.add(comment)
     db_session.commit()
+    db_session.refresh(comment)
 
-    return jsonify({'status': 'OK'})
+    return jsonify({'status': 'OK', 'comment_id': comment.id})
 
 
 @app.route('/api/posts/user/<int:user_id>', methods=['GET'])
