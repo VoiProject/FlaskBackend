@@ -98,3 +98,7 @@ def delete_post(client, post_id):
 
 def get_user_posts(client, user_id):
     return client.get('/api/posts/user/' + str(user_id))
+
+
+def get_user_profile(client, user_id):
+    return client.get('/api/profile/' + str(user_id))

@@ -233,3 +233,12 @@ def test_delete(client, registration_data):
     assert data['status'] == 'OK'
     assert len(unwrap(get_user_posts(client, user_id))['user_posts']) == 0
 
+
+def test_profile(client, registration_data):
+    user_id = registration_data['user_id']
+    add_post(client)
+
+    response = get_user_profile(client, user_id)
+    data = unwrap(response)
+    assert data['user']['login'] == sample_creds[0]['login']
+    assert len(data['user_posts']) == 1
