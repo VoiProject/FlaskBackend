@@ -276,12 +276,7 @@ def get_user_posts(user_id):
     user = get_user_by_id(user_id)
     if not user:
         abort(404)
-
-    user_posts = user.posts
-    if len(user_posts) == 0:
-        abort(404)
-
-    return jsonify({'user_posts': [p.to_json() for p in user_posts]})
+    return jsonify({'user_posts': [p.to_json() for p in user.posts]})
 
 
 @app.route('/api/feed/', defaults={'page_num': 1}, methods=['GET'])

@@ -90,3 +90,11 @@ def get_post_comments_count(client, post_id):
 
 def add_post_comment(client, post_id, comment=default_comment):
     return client.post('/api/post/comment/' + str(post_id), data=json.dumps({'comment_text': comment}))
+
+
+def delete_post(client, post_id):
+    return client.delete('/api/post/' + str(post_id))
+
+
+def get_user_posts(client, user_id):
+    return client.get('/api/posts/user/' + str(user_id))

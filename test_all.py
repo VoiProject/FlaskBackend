@@ -159,9 +159,10 @@ def test_search(client):
     assert len(data['user_feed']) == 1
 
 
-def test_likes(client):
-    user_data = enter_correct(register, client, sample_creds[0])
-    user_id = user_data['user_id']
+def test_likes(client, registration_data):
+    # 4.1.5.1
+
+    user_id = registration_data['user_id']
 
     response = add_post(client)
     data = unwrap(response)
@@ -188,9 +189,10 @@ def test_likes(client):
     assert not unwrap(is_post_liked_by_user(client, post_id))['like_state']
 
 
-def test_comments(client):
-    user_data = enter_correct(register, client, sample_creds[0])
-    user_id = user_data['user_id']
+def test_comments(client, registration_data):
+    # 4.1.5.2
+
+    user_id = registration_data['user_id']
 
     data = unwrap(add_post(client))
     post_id = data['post_id']
@@ -212,3 +214,22 @@ def test_comments(client):
     assert data == data_maybe
     assert unwrap(get_post_comments(client, post_id)) == [data_maybe]
     assert unwrap(get_post_comments_count(client, post_id))['count'] == 1
+
+
+def test_delete(client, registration_data):
+    user_id = registration_data['user_id']
+
+    assert len(unwrap(get_user_posts(client, user_id))['user_posts']) == 0
+
+    response = add_post(client)
+    data = unwrap(response)
+    post_id = data['post_id']
+
+    assert len(unwrap(get_user_posts(client, user_id))['user_posts']) == 1
+
+    response = delete_post(client, post_id)
+    data = unwrap(response)
+
+    assert data['status'] == 'OK'
+    assert len(unwrap(get_user_posts(client, user_id))['user_posts']) == 0
+
